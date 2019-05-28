@@ -87,18 +87,18 @@ class ARIAname:
 		dates=self.date.split('_') 
 		RefDate=dates[0] # reference date 
 		self.RefDate=RefDate # full date 
-		self.RefYear=RefDate[:4] # YYYY 
-		self.RefMo=RefDate[4:6]  # MM 
-		self.RefDay=RefDate[6:8] # DD 
+		self.RefYear=int(RefDate[:4]) # YYYY 
+		self.RefMo=int(RefDate[4:6])  # MM 
+		self.RefDay=int(RefDate[6:8]) # DD 
 		SecDate=dates[1] # secondary date 
 		self.SecDate=SecDate # full date 
-		self.SecYear=SecDate[:4] # YYYY 
-		self.SecMo=SecDate[4:6]  # MM 
-		self.SecDay=SecDate[6:8] # DD 
+		self.SecYear=int(SecDate[:4]) # YYYY 
+		self.SecMo=int(SecDate[4:6])  # MM 
+		self.SecDay=int(SecDate[6:8]) # DD 
 		# Time formatting 
-		self.hh=self.time[:2]  # hours 
-		self.mm=self.time[2:4] # minutes 
-		self.ss=self.time[4:6] # seconds 
+		self.hh=int(self.time[:2])  # hours 
+		self.mm=int(self.time[2:4]) # minutes 
+		self.ss=int(self.time[4:6]) # seconds 
 		# Coordinate formatting 
 		C1=self.coords.split('_')[0] 
 		self.C1='%s.%s' % (C1[:2],C1[2:5]) 
@@ -108,7 +108,7 @@ class ARIAname:
 		self.hemi2=C2[-1] 
 	# Print if specified 
 	def vocal(self): 
-		print('self.name') 
+		print('Name: %s' % self.name) 
 		print('\tSensor [sensor]: %s' % self.sensor) 
 		print('\tDataset name [dataset] (GUNW,GUNW_COSEISMIC): %s' % self.dataset) 
 		print('\tSatellite orient. [AD] (A,D): %s' % self.orient) 
@@ -133,6 +133,17 @@ class ARIAname:
 		print('\tCoords of west corners [coords]',self.coords) 
 		print('\t\tC1 [C1,hemi1]:',self.C1,self.hemi1) 
 		print('\t\tC2 [C2,hemi2]:',self.C2,self.hemi2) 
+
+
+###############################
+### --- Time formatting --- ###
+###############################
+
+# --- Time in seconds --- 
+# Convert hours,min,sec to total seconds 
+def hms2sec(h,m,s): 
+	total_sec=int(h)*3600+int(m)*60+int(s) 
+	return total_sec 
 
 
 # --- Date difference --- 
@@ -200,6 +211,10 @@ def dateDiff(date1,date2,fmt='yr',vocal=False):
 		print('\tTime diff: %i sec => %.6f %s' % (tDiff,tDiffFmt,fmt)) 
 	return tDiffFmt 
 
+
+####################################
+### --- Geographic transform --- ###
+####################################
 
 # --- GDAL geographic transform --- 
 # Format transform data into something useful 
