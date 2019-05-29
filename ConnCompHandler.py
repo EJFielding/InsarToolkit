@@ -1,5 +1,10 @@
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Handle connected components files  
+# Handle and manipulate connected components files  
+# 
+# Functions 
+# cmpStats - provides statistics of conn comp maps 
+# cmpOrder - reorders conn comp based on percent of total extent 
+# cmpIsolate - provides maps of single conn comps 
 # 
 # By Rob Zinke 2019 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -127,14 +132,14 @@ def cmpIsolate(Phs,Cmp,cmpList=[1],NoData_out='mask',vocal=False,plot=False):
 	for c in cmpList: 
 		if vocal is True: 
 			print('\tcomponent: %i' % c) 
-		if NoData_out.lower()=='mask':
+		if NoData_out=='mask':
 			PhsMap[c]=np.ma.array(Phs,mask=(Cmp!=c)) 
 			CmpMap[c]=np.ma.array(Cmp,mask=(Cmp!=c)) 
 		else: 
 			PhsMap[c]=Phs.copy() # add values 
-			PhsMap[c][Cmp!=c]=NoData # null nodata values 
+			PhsMap[c][Cmp!=c]=NoData_out # null nodata values 
 			CmpMap[c]=Cmp.copy() # add values 
-			CmpMap[c][Cmp!=c]=NoData # null nodata values 
+			CmpMap[c][Cmp!=c]=NoData_out # null nodata values 
 		if plot is True: 
 			F=plt.figure('Comp%i' % c) 
 			axP=F.add_subplot(1,2,1) 
