@@ -1,4 +1,4 @@
-#!/anaconda3/bin/python 
+#!/usr/bin/env python3 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Find and plot the difference in phase between two 
 #  wrapped interferograms 
