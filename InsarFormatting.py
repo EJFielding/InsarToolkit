@@ -238,6 +238,7 @@ class GDALtransform:
 		self.xmin=np.min([self.xend,self.xstart])
 		self.xmax=np.max([self.xend,self.xstart]) 
 		self.extent=[self.xmin,self.xmax,self.ymin,self.ymax] 
+		self.bounds=[self.xmin,self.ymin,self.xmax,self.ymax] 
 		# Print outputs? 
 		if vocal is not False: 
 			print('Image properties: ')
