@@ -122,9 +122,7 @@ def pointing2LOS(P,U):
 	U=U.reshape(3,1)
 
 	# Project U along P
-	LOS=np.dot(P,U)
-	print('Does not work yet')
-	exit()
+	LOS=np.dot(P,U).squeeze()
 	return LOS
 
 
