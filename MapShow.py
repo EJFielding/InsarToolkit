@@ -52,6 +52,9 @@ if isinstance(I[0,0],np.complex64):
 	Imag=np.abs(I) 
 	I=np.angle(I) 
 
+# Record upper-left value for posterity
+ULval=I[0,0]
+
 # Statistics 
 Iarray=I.reshape(-1,1) 
 
@@ -109,6 +112,11 @@ if sys.argv.count('--dsImg')>0:
 	dsImg=2**dsImg 
 else:
 	dsImg=1 
+
+# Report stats
+print('Min:',I.min())
+print('Max:',I.max())
+print('Upper left: {0:.16f}'.format(ULval))
 
 
 # --- Main plot --- 
