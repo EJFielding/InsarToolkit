@@ -5,7 +5,7 @@
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # Import modules 
-from datetime import datetime 
+from datetime import datetime, time
 import numpy as np 
 import matplotlib.pyplot as plt 
 from osgeo import gdal 
@@ -63,6 +63,15 @@ class SentinelName:
 		self.ProdUnique=name_parts[8] # Product Unique ID 
 
 
+# --- Unique values ---
+# Find the unique values in a list
+def listUnique(L):
+	uniqueVals=[] # empty list for unique values
+	# Loop through each value and add to list if not there
+	[uniqueVals.append(i) for i in L if i not in uniqueVals] 
+	return uniqueVals
+
+
 # --- ARIA standard product name parser --- 
 # Parse ARIA product names 
 #	Key: https://aria.jpl.nasa.gov/node/97 
@@ -99,6 +108,7 @@ class ARIAname:
 		self.hh=int(self.time[:2])  # hours 
 		self.mm=int(self.time[2:4]) # minutes 
 		self.ss=int(self.time[4:6]) # seconds 
+		self.time=time(hour=self.hh,minute=self.mm,second=self.ss)
 		# Coordinate formatting 
 		C1=self.coords.split('_')[0] 
 		self.C1='%s.%s' % (C1[:2],C1[2:5]) 
@@ -144,6 +154,17 @@ class ARIAname:
 def hms2sec(h,m,s): 
 	total_sec=int(h)*3600+int(m)*60+int(s) 
 	return total_sec 
+
+
+# --- Time in hms ---
+# Convert total seconds to hours,min,sec
+def sec2hms(total_sec):
+	h=int(total_sec//3600) # hours
+	total_sec%=3600 # update time left over
+	m=int(total_sec//60) # minutes
+	total_sec%=60 # update time left over
+	s=int(total_sec) # seconds
+	return h,m,s
 
 
 # --- Date difference --- 
@@ -212,6 +233,38 @@ def dateDiff(date1,date2,fmt='yr',vocal=False):
 	return tDiffFmt 
 
 
+# --- Average time ---
+# Compute the average time given a list of times
+class avgTime:
+	def __init__(self,TimeList,vocal=False):
+		# Check formatting is appropriate
+		if isinstance(TimeList[0],time):
+			print('Reading as datetime.time object')
+		elif hasattr(TimeList[0],'hour') and hasattr(TimeList[0],'minute') and hasattr(TimeList[0],'second'):
+			print('Reading as custom time object')
+		assert hasattr(TimeList[0],'hour') and hasattr(TimeList[0],'minute') and hasattr(TimeList[0],'second'), \
+		'Please format as datetime.time or similar object'
+
+		# Find average in seconds
+		nTimes=len(TimeList) # number of time recordings in list
+		Seconds=0 # convert list of times into number of seconds
+		for t in TimeList:
+			s=hms2sec(t.hour,t.minute,t.second) # convert time to seconds
+			Seconds+=s # keep running list of cumulative seconds
+		Seconds/=nTimes # divide for average
+		if vocal is True:
+			print('Number of time samples: {}'.format(nTimes))
+			print('Avergage time (seconds): {}'.format(Seconds) )
+
+		# Convert seconds back to hours, minutes, seconds
+		self.total_seconds=Seconds # store to object
+		self.h,self.m,self.s=sec2hms(Seconds) # hms format
+		self.time=time(hour=self.h,minute=self.m,second=self.s)
+		if vocal is True:
+			print('Average time: {}:{}:{}'.format(self.h,self.m,self.s))
+
+
+
 ####################################
 ### --- Geographic transform --- ###
 ####################################
@@ -238,6 +291,7 @@ class GDALtransform:
 		self.xmin=np.min([self.xend,self.xstart])
 		self.xmax=np.max([self.xend,self.xstart]) 
 		self.extent=[self.xmin,self.xmax,self.ymin,self.ymax] 
+		self.bounds=[self.xmin,self.ymin,self.xmax,self.ymax] 
 		# Print outputs? 
 		if vocal is not False: 
 			print('Image properties: ')
