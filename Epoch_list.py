@@ -137,5 +137,3 @@ print('%i unqiue weather epochs' % (len(UniqueWeatherDates)))
 # Close files  
 Wfile.close()  # close weather sample file 
 UWfile.close() # close unique weather sample file 
-
-

@@ -215,7 +215,3 @@ class ARIAphaseStitch:
 		cax2=ax2.imshow(Cmp,cmap='nipy_spectral',extent=self.extent) 
 		ax2.set_title('Components') 
 		F.colorbar(cax2,orientation='vertical') 
-
-
-
-
