@@ -1,129 +1,161 @@
 #!/usr/bin/env python3 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Find and plot the difference in phase between two 
-#  wrapped interferograms 
+# Plot most types of Insar products, including complex 
+#  images and multi-band images
 # 
 # by Rob Zinke 2019 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 import sys 
 import numpy as np 
 import matplotlib.pyplot as plt 
+from scipy.stats import mode
 from osgeo import gdal 
 
 
-# --- Help menu --- 
-if sys.argv.count('--help')>0: 
-	print(''' 
-INPUTS 
-	--dsImg 	[intiger]		Power-of-2 downsample factor
-								(does not affect statistics) 
+### --- Parser --- ###
+def createParser():
+	'''
+		Plot most types of Insar products, including complex images and multiband images.
+	'''
 
-	--vmin 		[float] 		Min display value 
-	--vmax 		[float]			Max display value 
-	--pctmin 	[float] 		Min value percent (not decimal)
-	--pctmax 	[float] 		Max value percent (not decimal) 
+	import argparse
+	parser = argparse.ArgumentParser(description='Plot most types of Insar products, including complex images and multiband images')
+	# Necessary 
+	parser.add_argument(dest='imgfile', type=str, help='File to plot')
+	# Options
+	parser.add_argument('-b','--band', dest='band', default=1, type=int, help='Band to display. Default = 1')
+	parser.add_argument('-ds', '--downsample', dest='dsample', default='0', type=int, help='Downsample factor (power of 2). Default = 2^0 = 1')
+	parser.add_argument('-vmin','--vmin', dest='vmin', default=None, type=float, help='Min display value')
+	parser.add_argument('-vmax','--vmax', dest='vmax', default=None, type=float, help='Max display value')
+	parser.add_argument('-pctmin','--pctmin', dest='pctmin', default=0, type=float, help='Min value percent')
+	parser.add_argument('-pctmax','--pctmax', dest='pctmax', default=100, type=float, help='Max value percent')
+	parser.add_argument('-bg','--background', dest='background', default=None, help='Background value. Default is None. Use \'auto\' for outside edge of image.')
+	parser.add_argument('-v','--verbose', dest='verbose', action='store_true', help='Verbose')
+	parser.add_argument('--plot_complex', dest='plot_complex', action='store_true', help='Plot amplitude image behind phase')
+	parser.add_argument('-hist','--hist', dest='hist', action='store_true', help='Show histogram')
+	parser.add_argument('--nbins', dest='nbins', default=50, type=int, help='Number of histogram bins. Default = 50')
 
-	--BG 		[opt:float]		Background value 
+	return parser
 
-	--hist 		[opt:integer]	Histogram 
-		''') 
-	exit() 
-
-
-# --- Load image --- 
-img_name=sys.argv[1] 
-
-img=gdal.Open(img_name,gdal.GA_ReadOnly) 
-nB=img.RasterCount 
-
-if nB==1:
-	B=1 # Wrapped 
-elif nB==2: 
-	B=2 # Unwrapped 
-print('Bands: %i' % B) 
-
-I=img.GetRasterBand(B).ReadAsArray() 
+def cmdParser(iargs = None):
+	parser = createParser()
+	return parser.parse_args(args=iargs)
 
 
-# --- Formatting --- 
-# Image type (real/complex)
-print('Type: %s' % type(I[0,0])) 
-if isinstance(I[0,0],np.complex64):
-	Imag=np.abs(I) 
-	I=np.angle(I) 
 
-# Record upper-left value for posterity
-ULval=I[0,0]
+### --- Main function --- ###
+if __name__=='__main__':
+	# Gather arguments
+	inpt=cmdParser()
 
-# Statistics 
-Iarray=I.reshape(-1,1) 
+	## Basic parameters
+	# Open image using gdal
+	DS=gdal.Open(inpt.imgfile,gdal.GA_ReadOnly)
+	nBands=DS.RasterCount # number of image bands
 
-# Background 
-if sys.argv.count('--BG')>0: 
-	n_BG=sys.argv.index('--BG') 
-	try: 
-		BG=float(sys.argv[n_BG+1]) 
-	except: 
-		BG=0 
-	I=np.ma.array(I,mask=(I==BG)) 
-	Iarray=Iarray[Iarray!=BG] 
-	print('Removed BG: %f' % (BG))
+	# Geo transform
+	M=DS.RasterYSize; N=DS.RasterXSize
+	T=DS.GetGeoTransform()
+	left=T[0]; dx=T[1]; right=left+N*dx 
+	top=T[3]; dy=T[5]; bottom=top+M*dy 
+	extent=(left, right, bottom, top)
 
-
-vmin=None 
-vmax=None 
-if sys.argv.count('--vmin')>0: 
-	n_vmin=sys.argv.index('--vmin') 
-	vmin=sys.argv[n_vmin+1]
-if sys.argv.count('--vmax')>0: 
-	n_vmax=sys.argv.index('--vmax') 
-	vmax=sys.argv[n_vmax+1] 
-if sys.argv.count('--pctmin')>0:
-	n_pctmin=sys.argv.index('--pctmin') 
-	vmin=np.percentile(Iarray,float(sys.argv[n_pctmin+1])) 
-if sys.argv.count('--pctmax')>0: 
-	n_pctmax=sys.argv.index('--pctmax') 
-	vmax=np.percentile(Iarray,float(sys.argv[n_pctmax+1])) 
-print('vmin:',vmin) 
-print('vmax:',vmax) 
-
-if vmin is not None and vmax is not None:
-	Iarray=Iarray[(Iarray>=float(vmin)) & (Iarray<=float(vmax))] 
-
-# Histogram 
-if sys.argv.count('--hist')>0:
-	n_hist=sys.argv.index('--hist') 
-	try:
-		nbins=int(sys.argv[n_hist+1]) 
-	except:
-		nbins=100 
-	H,edges=np.histogram(Iarray,nbins) 
-	centers=edges[:-1]+np.diff(edges)/2 
-
-	Hist=plt.figure('Hist') 
-	axH=Hist.add_subplot(111) 
-	axH.plot(centers,H,'b') 
-	axH.set_title('Histogram (%i bins)' % (nbins))  
-
-# Downsample image 
-if sys.argv.count('--dsImg')>0:
-	n_dsImg=sys.argv.index('--dsImg')
-	dsImg=int(sys.argv[n_dsImg+1]) 
-	dsImg=2**dsImg 
-else:
-	dsImg=1 
-
-# Report stats
-print('Min:',I.min())
-print('Max:',I.max())
-print('Upper left: {0:.16f}'.format(ULval))
+	# Report basic parameters
+	if inpt.verbose is True:
+		print('Image: {}'.format(inpt.imgfile))
+		print('BASIC PARAMETERS')
+		print('Number of bands: {}'.format(nBands))
+		print('Spatial extent: {}'.format(extent))
+		print('Pixel size (x) {}; (y) {}'.format(dx,dy))
 
 
-# --- Main plot --- 
-F=plt.figure() 
-ax=F.add_subplot(111) 
-cax=ax.imshow(I[::dsImg,::dsImg],vmin=vmin,vmax=vmax)
-F.colorbar(cax,orientation='horizontal') 
+	## Image properties
+	# Load image
+	img=DS.GetRasterBand(inpt.band).ReadAsArray()
+
+	# Image type (real/complex)
+	datatype=type(img[0,0])
+	if isinstance(img[0,0],np.complex64):
+		imgMag=np.abs(img) # amplitude
+		img=np.angle(img) # phase
+
+	# Background value
+	if inpt.background=='auto':
+		# Auto-determine background value
+		edgeValues=np.concatenate([img[0,:],img[-1,:],img[:,0],img[:,-1]])
+		background=mode(edgeValues).mode[0] # most common value
+	else:
+		# Use prescribed value
+		background=inpt.background 
+
+	if inpt.background:
+		mask=(img==background) # mask values
+		img=np.ma.array(img,mask=mask) # mask main image array
+
+	# Report
+	if inpt.verbose is True:
+		print('IMAGE PROPERTIES')
+		print('data type: {}'.format(datatype))
+		if inpt.background:
+			print('background value: {:16f}'.format(background))
 
 
-plt.show() 
+	## Image statistics
+	imgArray=img.reshape(-1,1) # reshape 2D image as 1D array
+
+	# Ignore background values
+	if inpt.background:
+		maskArray=mask.reshape(-1,1) # reshape mask from 2D to 1D
+		imgArray=imgArray[maskArray==False] # mask background values
+
+	# Ignore "outliers"
+	if inpt.vmin:
+		imgArray=imgArray[imgArray>=inpt.vmin]
+	if inpt.vmax:
+		imgArray=imgArray[imgArray<=inpt.vmax]
+
+	# Percentages
+	vmin,vmax=np.percentile(imgArray,(inpt.pctmin,inpt.pctmax))
+	imgArray=imgArray[imgArray>=vmin]
+	imgArray=imgArray[imgArray<=vmax]
+
+	# Histogram analysis
+	Hvals,Hedges=np.histogram(imgArray,bins=inpt.nbins)
+	Hcntrs=(Hedges[:-1]+Hedges[1:])/2 # centers of bin edges
+
+	# Report
+	if inpt.verbose is True:
+		print('IMAGE STATISTICS')
+		if inpt.background:
+			print('Ignoring background value')
+		if inpt.vmin:
+			print('vmin: {}'.format(inpt.vmin))
+		if inpt.vmax:
+			print('vmax: {}'.format(inpt.vmax))
+		print('Upper left value: {:.16f}'.format(img[0,0]))
+
+
+	## Main plot
+	# Downsample factor
+	dsample=int(2**inpt.dsample)
+
+	F=plt.figure() 
+	ax=F.add_subplot(111) 
+	if inpt.plot_complex is True:
+		print('Plot complex does not work yet')
+	cax=ax.imshow(img[::dsample,::dsample],vmin=vmin,vmax=vmax)
+	F.colorbar(cax,orientation='horizontal') 
+
+
+	## Plot histogram
+	if inpt.hist is True:
+		Fhist=plt.figure()
+		axHist=Fhist.add_subplot(111)
+		markerline, stemlines, baseline = plt.stem(Hcntrs, Hvals, 
+			linefmt='r',markerfmt='',use_line_collection=True)
+		stemlines.set_linewidths(None); baseline.set_linewidth(0)
+		axHist.plot(Hcntrs,Hvals,'k',linewidth=2)
+		axHist.set_ylim([0.95*Hvals.min(),1.05*Hvals.max()])
+
+
+	plt.show() 
