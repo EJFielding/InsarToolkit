@@ -141,9 +141,20 @@ if __name__=='__main__':
 
 	F=plt.figure() 
 	ax=F.add_subplot(111) 
+	cax=ax.imshow(img[::dsample,::dsample],
+		vmin=vmin,vmax=vmax,extent=extent) # <- Main image
+
 	if inpt.plot_complex is True:
-		print('Plot complex does not work yet')
-	cax=ax.imshow(img[::dsample,::dsample],vmin=vmin,vmax=vmax)
+		imgMag=np.ma.array(imgMag,mask=mask)
+		imgMag=imgMag**0.5
+		minMag,maxMag=np.percentile(imgMag,(5,95))
+		ax.imshow(imgMag[::dsample,::dsample],
+			vmin=minMag,vmax=maxMag,
+			cmap='Greys_r',extent=extent,
+			zorder=1)
+		cax.set_zorder(2)
+		cax.set_alpha(0.3)
+
 	F.colorbar(cax,orientation='horizontal') 
 
 
