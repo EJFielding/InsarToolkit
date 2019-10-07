@@ -24,6 +24,7 @@ def createParser():
 	parser.add_argument(dest='imgfile', type=str, help='File to plot')
 	# Options
 	parser.add_argument('-b','--band', dest='band', default=1, type=int, help='Band to display. Default = 1')
+	parser.add_argument('-c','--color','--cmap',dest='cmap', default='viridis', type=str, help='Colormap of plot')
 	parser.add_argument('-ds', '--downsample', dest='dsample', default='0', type=int, help='Downsample factor (power of 2). Default = 2^0 = 1')
 	parser.add_argument('-vmin','--vmin', dest='vmin', default=None, type=float, help='Min display value')
 	parser.add_argument('-vmax','--vmax', dest='vmax', default=None, type=float, help='Max display value')
@@ -141,7 +142,7 @@ if __name__=='__main__':
 
 	F=plt.figure() 
 	ax=F.add_subplot(111) 
-	cax=ax.imshow(img[::dsample,::dsample],
+	cax=ax.imshow(img[::dsample,::dsample],cmap=inpt.cmap,
 		vmin=vmin,vmax=vmax,extent=extent) # <- Main image
 
 	if inpt.plot_complex is True:
