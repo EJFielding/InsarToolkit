@@ -2,6 +2,18 @@
 import numpy as np
 import matplotlib.pyplot as plt 
 
+'''
+This script is primarily designed as a routine for calculating satellite 
+ line-of-sight changes from known ground displacements in EW, NS, and vertical
+ directions. 
+LOS calculation functions are available for conversation using
+ Sensor orientation in azimuth and elevation (defined in ARIA user guide) to line-of-sight
+ Pointing vector with [E, N, Z] components
+Functions are modularized for generic use in converting: 
+ Heading (flight direction relative to N) to ARIA convention azimuth
+ Satellite orientation to pointing vector
+'''
+
 
 ### --- Parser ---
 def createParser():
@@ -132,6 +144,10 @@ def pointing2LOS(P,U):
 
 ### --- Main ---
 if __name__ == "__main__":
+	'''
+	This routine converts ground displacements in EW, NS, and vertical
+	 to satellite line-of-sight changes
+	'''
 	inpt=cmdParser()
 
 	## Check inputs
