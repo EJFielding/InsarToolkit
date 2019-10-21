@@ -286,7 +286,7 @@ def px2coords(tnsf,px,py):
 	return xcoord, ycoord
 
 # Map coordinates to pixels
-def coords2px(tnsf,lat,lon):
+def coords2px(tnsf,lon,lat):
 	left=tnsf[0]; dx=tnsf[1]
 	top=tnsf[3]; dy=tnsf[5]
 	px=int((lon-left)/dx)
