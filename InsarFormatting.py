@@ -167,48 +167,55 @@ def sec2hms(total_sec):
 	return h,m,s
 
 
+# --- SAR date ---
+# Format YYYYMMDD:hhmmss into Python date format
+class SARdate: 
+	def __init__(self,name,date): 
+		# Object attributes 
+		self.name=name 
+		self.n=len(date) # nb char 
+		assert int(date[0:4]) in range(1990,2100), "Check %s year format." % (name) 
+		self.yr=int(date[0:4]) # year 
+		assert int(date[4:6]) in range(1,13), "Check %s month format." % (name) 
+		self.mo=int(date[4:6]) # month 
+		assert int(date[6:8]) in range(1,32), "Check %s day format." % (name) 
+		self.dy=int(date[6:8]) # day 
+		# Assign hours, minutes, seconds 
+		if self.n>8: 
+			time=date[8:] # second half of string 
+			time=time.strip('T'); time=time.strip(':') # fmt 
+			self.hr=int(time[0:2]) # hours 
+			self.mn=int(time[2:4]) # minutes 
+			self.sc=int(time[4:6]) # seconds  
+		else: 
+			self.hr=00 # hours 
+			self.mn=00 # minutes 
+			self.sc=00 # seconds 
+
+
 # --- Date difference --- 
 # Difference two dates in format YYYYMMDD:hhmmss to 
 #	retrieve a single value of time with 
 #	desired units (e.g., years; seconds) 
 def dateDiff(date1,date2,fmt='yr',vocal=False): 
-	# Check input formats 
+	## Check input formats 
 	#	YYYYMMDD is 8 char long 
 	#	YYYYMMDD_hhmmss is 17 char long 
 	n1=len(date1)
 	assert n1==8 or n1 in range(14,16), "Check date1 format length."  
 	n2=len(date2) 
 	assert n2==8 or n2 in range(14,16), "Check date2 format length." 
-	# Define object 
-	class D: 
-		def __init__(self,name,date): 
-			# Object attributes 
-			self.name=name 
-			self.n=len(date) # nb char 
-			assert int(date[0:4]) in range(1990,2100), "Check %s year format." % (name) 
-			self.yr=int(date[0:4]) # year 
-			assert int(date[4:6]) in range(1,13), "Check %s month format." % (name) 
-			self.mo=int(date[4:6]) # month 
-			assert int(date[6:8]) in range(1,32), "Check %s day format." % (name) 
-			self.dy=int(date[6:8]) # day 
-			# Assign hours, minutes, seconds 
-			if self.n>8: 
-				time=date[8:] # second half of string 
-				time=time.strip('T'); time=time.strip(':') # fmt 
-				self.hr=int(time[0:2]) # hours 
-				self.mn=int(time[2:4]) # minutes 
-				self.sc=int(time[4:6]) # seconds  
-			else: 
-				self.hr=00 # hours 
-				self.mn=00 # minutes 
-				self.sc=00 # seconds 
+
+	## Format into Python dates
 	# Parse img 1 into age units 
-	D1=D('date1',date1) # create instance 
+	D1=SARdate('date1',date1) # create instance 
 	# Parse img 2 into age units 
-	D2=D('date2',date2) # create instance 
+	D2=SARdate('date2',date2) # create instance 
 	# Convert YYYYMMDD to useable date 
 	D1.date=datetime(D1.yr,D1.mo,D1.dy,D1.hr,D1.mn,D1.sc) 
 	D2.date=datetime(D2.yr,D2.mo,D2.dy,D2.hr,D2.mn,D2.sc) 
+
+	## Difference dates
 	# Calculate time difference in seconds  
 	dateDiff=D2.date-D1.date 
 	tDiff=dateDiff.days*24*60*60 # day*hr*min*sec 
@@ -269,6 +276,32 @@ class avgTime:
 ### --- Geographic transform --- ###
 ####################################
 
+# --- Convert pixel location to map location ---
+# Pixels to map coordinates
+def px2coords(tnsf,px,py):
+	left=tnsf[0]; dx=tnsf[1]
+	top=tnsf[3]; dy=tnsf[5]
+	xcoord=left+px*dx
+	ycoord=top+py*dy
+	return xcoord, ycoord
+
+# Map coordinates to pixels
+def coords2px(tnsf,lat,lon):
+	left=tnsf[0]; dx=tnsf[1]
+	top=tnsf[3]; dy=tnsf[5]
+	px=int((lon-left)/dx)
+	py=int((top-lat)/dy)
+	return px,py
+
+
+# --- Simple map extent ---
+# Convert geo transform to extent
+def transform2extent(tnsf,M,N):
+	left=tnsf[0]; dx=tnsf[1]; right=left+dx*N
+	top=tnsf[3]; dy=tnsf[5]; bottom=top+dy*M
+	extent=(left,right,bottom,top)
+	return extent
+
 # --- GDAL geographic transform --- 
 # Format transform data into something useful 
 class GDALtransform:
@@ -300,3 +333,33 @@ class GDALtransform:
 			print('\tystart: %f\tyend: %f' % (self.ystart,self.yend)) 
 			print('\txstart: %f\txend: %f' % (self.xstart,self.xend)) 
 			print('\tystep: %f\txstep: %f' % (self.ystep,self.xstep))
+
+
+################################
+### --- Image formatting --- ###
+################################
+
+# --- Save image using a template ---
+# Wrapper for saving function
+def save2tiff(array,method='parameters',template=None):
+	# Determine what to do by method
+	if method in ['template']:
+		save2tiff_template(array,template)
+	elif method in ['parameters']:
+		save2tiff_parameters(array,parameters)
+
+# Using a given image
+def save2tiff_template(array,template):
+	print('Does not work yet')
+		# m,n=array.shape
+		# proj=PHSlist[0].GetProjection() 
+		# driver=gdal.GetDriverByName('GTiff') 
+		# PHSfull=driver.Create(outDir+'StitchedPhase',n,m,1,gdal.GDT_Float32) 
+		# PHSfull.GetRasterBand(1).WriteArray(self.StitchedPhase) 
+		# PHSfull.SetProjection(proj) 
+		# PHSfull.SetGeoTransform(tnsf) 
+		# PHSfull.FlushCache() 
+
+# Using parameters
+def save2tiff_parameters():
+	print('Does not work yet')
