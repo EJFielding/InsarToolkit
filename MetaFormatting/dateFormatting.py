@@ -190,7 +190,39 @@ def cumulativeTime(datePairs,absTime=True):
 ########################
 
 # Triplets
-def formatTriplets(datePairs,minTime=None,maxTime=None):
+def triplets(dates,minTime=None,maxTime=None,verbose=False):
+	"""
+		Provide a list of unique dates in format YYYYMMDD. This
+		 function will create a list of the (n1-n0, n2-n1, n2-n0)
+		 phase triplets. 
+		It does not accept a list of pairs like the "formatTriplets"
+		 function below.
+	"""
+
+	# Loop through dates to create valid triplet combinations
+	nDates=len(dates)
+	triplets=[]
+	for n in range(nDates-2):
+		dateI=dates[n] # first date in sequence
+		dateJ=dates[n+1] # second date in sequence
+		dateK=date[n+2] # third date in sequence
+		pairList=[[dateI,dateJ],[dateJ,dateK],[dateI,dateK]]
+
+
+	if verbose is True:
+		print('{} unique dates'.format(nDates))
+		[print(triplet) for triplet in triplets]
+		print('{} triplets created'.format(len(triplets)))
+
+
+
+# Triplets from list of pairs
+def formatTriplets(datePairs,minTime=None,maxTime=None,verbose=False):
+	"""
+		Provide a list of date pairs to retrieve a list of phase
+		 triplets. 
+	"""
+
 	# Loop through date pairs to find all valid triplet combinations
 	nDatePairs=datePairs.shape[0] # number of date pairs
 	triplets=[]
@@ -247,9 +279,9 @@ def formatTriplets(datePairs,minTime=None,maxTime=None):
 	[triplets.pop(c) for c in failed_conditions]
 
 	# Report if requested
-	if inpt.verbose is True:
+	if verbose is True:
 		print('Triplets:')
-		[print(t) for t in triplets]
+		[print(triplet) for triplet in triplets]
 		print(nTriplets)
 	return triplets
 
