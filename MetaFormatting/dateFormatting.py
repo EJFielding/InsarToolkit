@@ -190,7 +190,7 @@ def cumulativeTime(datePairs,absTime=True):
 ########################
 
 # Triplets
-def triplets(dates,minTime=None,maxTime=None,verbose=False):
+def createTriplets(dates,minTime=None,maxTime=None,verbose=False):
 	"""
 		Provide a list of unique dates in format YYYYMMDD. This
 		 function will create a list of the (n1-n0, n2-n1, n2-n0)
@@ -205,14 +205,18 @@ def triplets(dates,minTime=None,maxTime=None,verbose=False):
 	for n in range(nDates-2):
 		dateI=dates[n] # first date in sequence
 		dateJ=dates[n+1] # second date in sequence
-		dateK=date[n+2] # third date in sequence
+		dateK=dates[n+2] # third date in sequence
 		pairList=[[dateI,dateJ],[dateJ,dateK],[dateI,dateK]]
+		triplets.append(pairList) # add to list
 
-
+	# Print if requested
 	if verbose is True:
-		print('{} unique dates'.format(nDates))
+		print('Triplets...')
+		print('{} unique dates for triplet formulation'.format(nDates))
 		[print(triplet) for triplet in triplets]
 		print('{} triplets created'.format(len(triplets)))
+
+	return triplets
 
 
 
@@ -298,8 +302,8 @@ def formatHDFdates(dateDS,verbose=False):
 	allDates=[]; [allDates.extend(pair) for pair in datePairs] # add dates from pairs
 	dates=[]; [dates.append(d) for d in allDates if d not in dates] # limit to unique dates
 	if verbose is True:
-		print('Date pairs:\n{}'.format(datePairs))
-		print('Unique dates:\n{}'.format(dates))
+		print('HDF5 date pairs:\n{}'.format(datePairs))
+		print('HDF5 unique dates:\n{}'.format(dates))
 	return dates, datePairs
 
 
