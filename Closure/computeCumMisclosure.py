@@ -11,6 +11,7 @@
 import numpy as np 
 import matplotlib.pyplot as plt 
 import h5py
+from datetime import datetime
 # InsarToolkit modules
 from dateFormatting import formatHDFdates, createTriplets
 from viewingFunctions import mapStats, imagettes
@@ -130,14 +131,13 @@ class misclosureMap:
 
 ## Plot series
 def plotSeries(name,ax,series,timeAxis=False):
-	ax.plot(series,'-ko',label=name)
+	ax.plot(cumTime,series,'-k.')
 
-	#ax.legend()
 	ax.set_ylabel(name+'\nradians')
 	if timeAxis is False:
 		ax.set_xticks([])
 	else:
-		ax.set_xlabel('time')
+		ax.set_xlabel('time (yrs)')
 
 
 ## Analyze misclosure stack
@@ -155,10 +155,10 @@ def analyzeStack(event):
 
 	# Plot query points on maps
 	cumMiscMap.ax.cla(); cumMiscMap.plotax() # clear and replot map
-	cumMiscMap.ax.plot(px,py,'k+',zorder=3)
+	cumMiscMap.ax.plot(px,py,color='k',marker='o',markerfacecolor='w',zorder=3)
 
 	cumAbsMiscMap.ax.cla(); cumAbsMiscMap.plotax()
-	cumAbsMiscMap.ax.plot(px,py,'k+',zorder=3)
+	cumAbsMiscMap.ax.plot(px,py,color='k',marker='o',markerfacecolor='w',zorder=3)
 
 	# Timeseries
 	# Plot misclosure over time
@@ -172,9 +172,7 @@ def analyzeStack(event):
 	cumAbsMiscSeriesAx.cla() # cumulative absolute misclosure
 	plotSeries('(cum. abs. miscl.)',cumAbsMiscSeriesAx,np.cumsum(absMiscStack[:,py,px]),
 		timeAxis=True)
-	miscSeriesFig.suptitle('Misclosure')
 	miscSeriesFig.tight_layout()
-
 
 	# Draw outcomes
 	cumMiscMap.Fig.canvas.draw()
@@ -202,7 +200,7 @@ def calcMisclosure(inpt):
 		dataset.close()
 
 
-	## Analysis
+	## Triplet formulation
 	# Formulate triplets
 	allDates=np.array(dates) # convert to numpy array for sorting
 	allDates=np.sort(dates) # sort smallest-> largest
@@ -251,13 +249,14 @@ def calcMisclosure(inpt):
 		[print(triplet) for triplet in validTriplets]
 		print('{} valid triplets'.format(nValidTriplets))
 
+
 	# Plot inputs if requested
 	if inpt.pltInputs is True:
 		imagettes(phsCube,4,4,cmap='jet',downsampleFactor=1,pctmin=2,pctmax=98,background='auto',
 		titleList=pairList,supTitle=None)
 
 
-	# Compute misclosure
+	## Compute misclosure
 	misclosureStack=[] # misclosure
 	absMiscStack=[] # absolute value of misclosure
 	for t in range(nValidTriplets):
@@ -277,7 +276,7 @@ def calcMisclosure(inpt):
 			IK-=IK[inpt.refY,inpt.refX]
 
 		if inpt.verbose is True:
-			print('Ref X pixel: {}; Ref Y pixel: {}'.format(inpt.refX,inpt.refY))
+			print('Calculating misclosure. Ref X pixel: {}; Ref Y pixel: {}'.format(inpt.refX,inpt.refY))
 
 		# Calculate misclosure
 		misclosure=IJ+JK-IK
@@ -299,7 +298,20 @@ def calcMisclosure(inpt):
 	cumMisclosure=np.sum(misclosureStack,axis=0)
 	cumAbsMisclosure=np.sum(absMiscStack,axis=0)
 
-	return misclosureStack, absMiscStack, cumMisclosure, cumAbsMisclosure
+
+	## Determine cumulative time since beginning of series
+	startDate=datetime.strptime(str(validTriplets[0][0][0]),"%Y%m%d")
+	lag0dates=[datetime.strptime(str(triplet[0][0]),"%Y%m%d") for triplet in validTriplets] # grab first date from each triplet
+	cumTime=[lag0date-startDate for lag0date in lag0dates]
+	cumTime=[time.days/365.25 for time in cumTime]
+
+	# Report if requested
+	if inpt.verbose is True:
+		print('Series start date: {}'.format(startDate))
+		print('Cumulative time: {}'.format(cumTime))
+
+
+	return misclosureStack, absMiscStack, cumMisclosure, cumAbsMisclosure, cumTime
 
 
 
@@ -340,7 +352,7 @@ if __name__=='__main__':
 	inpt=cmdParser()
 
 	## Calculate misclosure
-	misclosureStack, absMiscStack, cumMisclosure, cumAbsMisclosure=calcMisclosure(inpt)
+	misclosureStack, absMiscStack, cumMisclosure, cumAbsMisclosure, cumTime=calcMisclosure(inpt)
 
 	# Plot and analyze misclosure
 	if inpt.pltMisclosure is True:
@@ -350,7 +362,7 @@ if __name__=='__main__':
 
 		## Misclosure analysis
 		# Spawn misclosure figure
-		miscSeriesFig=plt.figure(); miscSeriesFig.suptitle('Misclosure')
+		miscSeriesFig=plt.figure('Misclosure')
 		miscSeriesAx=miscSeriesFig.add_subplot(411)
 		cumMiscSeriesAx=miscSeriesFig.add_subplot(412)
 		absMiscSeriesAx=miscSeriesFig.add_subplot(413)
