@@ -265,15 +265,17 @@ def calcMisclosure(inpt):
 		JK=phsCube[indices[1],:,:]
 		IK=phsCube[indices[2],:,:]
 
-		# Zero at reference point
+		# Determine reference point
 		if inpt.refY is 'auto' or inpt.refX is 'auto':
 			inpt.refY=np.random.randint(0,M,1)
 			inpt.refX=np.random.randint(0,N,1)
 		else:
 			inpt.refX=int(inpt.refX); inpt.refY=int(inpt.refY)
-			IJ-=IJ[inpt.refY,inpt.refX]
-			JK-=JK[inpt.refY,inpt.refX]
-			IK-=IK[inpt.refY,inpt.refX]
+
+		# Zero at reference point
+		IJ-=IJ[inpt.refY,inpt.refX]
+		JK-=JK[inpt.refY,inpt.refX]
+		IK-=IK[inpt.refY,inpt.refX]
 
 		if inpt.verbose is True:
 			print('Calculating misclosure. Ref X pixel: {}; Ref Y pixel: {}'.format(inpt.refX,inpt.refY))
