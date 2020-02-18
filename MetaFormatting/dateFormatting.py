@@ -119,13 +119,13 @@ def dateDiff(date1,date2,fmt='yr',vocal=False):
 	tDiff=dateDiff.days*24*60*60 # day*hr*min*sec 
 	tDiff+=dateDiff.seconds # hr*min*sec 
 	# Convert seconds to desired output 
-	if fmt is 'y' or fmt is 'yr' or fmt is 'year' or fmt is 'years': 
+	if fmt in ['y', 'yr', 'year', 'years']: 
 		fmt='years' 
 		tDiffFmt=tDiff/31536000 # sec/yr 
-	elif fmt is 'm' or fmt is 'mo' or fmt is 'month' or fmt is 'months':
+	elif fmt in ['m', 'mo', 'month', 'months']:
 		fmt='ave months' 
 		tDiffFmt=tDiff/2628002.88 # sec/mo 
-	elif fmt is 'd' or fmt is 'dy' or fmt is 'day' or fmt is 'days': 
+	elif fmt in ['d', 'dy', 'day', 'days']: 
 		fmt='days' 
 		tDiffFmt=tDiff/86400 # sec/day 
 	else: 
