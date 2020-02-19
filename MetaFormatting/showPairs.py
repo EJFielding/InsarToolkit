@@ -20,8 +20,9 @@ def createParser():
 	parser.add_argument('--max-interval', dest='maxIntvl', type=int, default=None, help='Maximum time interval')
 
 	# Outputs
-	parser.add_argument('-o','--outName', dest='outName', type=str, default=None, help='Output name')
+	parser.add_argument('-p','--plot', dest='plot', action='store_true', help='Plot pairs')
 	parser.add_argument('-v','--verbose', dest='verbose', action='store_true', help='Verbose mode')
+	parser.add_argument('-o','--outName', dest='outName', type=str, default=None, help='Output name')
 
 	return parser
 
@@ -137,6 +138,21 @@ def selectPairs(inpt,files):
 		files.intvls=selectIntvls; del selectIntvls
 
 
+## Plot pairs
+def plotPairs(files):
+	# Format pairs into nested list
+	#  [[ref, sec],
+	#   [ref, sec]]
+	pairs=[pair.split('_') for pair in files.pairs] # convert to nested list
+	pairs=[[int(pair[0]),int(pair[1])] for pair in pairs] # convert to integers
+
+	import matplotlib.pyplot as plt
+	from viewingFunctions import plotDatePairs
+	plotDatePairs(pairs)
+
+	plt.show()
+
+
 
 ### Main ---
 if __name__=='__main__':
@@ -159,10 +175,14 @@ if __name__=='__main__':
 	## Remove dates by time interval
 	selectPairs(inpt,files)
 
-	if inpt.verbose is True:
-		print('Final selection:')
-		[print(pair, files.intvls[ndx]) for ndx,pair in enumerate(files.pairs)]
+	## Report final pairs and time intervals
+	print('Final selection:')
+	[print('{} {} days'.format(pair,files.intvls[ndx])) for ndx,pair in enumerate(files.pairs)]
 
+
+	## Plot if requested
+	if inpt.plot is True:
+		plotPairs(files)
 
 
 	# Save to file if requested
@@ -174,3 +194,4 @@ if __name__=='__main__':
 			outFile.close()
 		if inpt.verbose is True:
 			print('List saved to: {}'.format(outName))
+
