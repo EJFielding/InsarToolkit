@@ -2,10 +2,14 @@
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # by Rob Zinke 2019
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+### Import essential modules ---
 import os
 from glob import glob
 from datetime import datetime
 
+
+### Parser ---
 def createParser():
 	import argparse
 	parser = argparse.ArgumentParser(description='List the interferogram date pairs given a folder of ARIA products, interferograms, or a MintPy HDF5 file.')
@@ -30,6 +34,8 @@ def createParser():
 def cmdParser(iargs = None):
 	parser = createParser()
 	return parser.parse_args(args=iargs)
+
+
 
 ### Files class ---
 class Files:
