@@ -30,6 +30,9 @@ def createParser():
 	parser.add_argument('--max-interval', dest='maxIntvl', type=int, default=1000, help='Max interval in days (default = 1000)')
 	parser.add_argument('-l','--lags', dest='lags', type=int, default=1, help='Number of lags')
 
+	# Step arguments
+	parser.add_argument('--step', dest='step', type=int, default=None, help='Minimum time span between adjacent pairs in days (default = None)')
+
 	# Outputs
 	parser.add_argument('-p','--plot', dest='plot', action='store_true', help='Plot pairs')
 	parser.add_argument('-v','--verbose', dest='verbose', action='store_true', help='Verbose mode')
@@ -102,9 +105,21 @@ def createPairs(inpt,dates):
 	# Convert dates to datetime objects
 	epochs=[datetime.strptime(date,'%Y%m%d') for date in dates]
 
+	# Construct list of master dates
+	if inpt.step:
+		masters=[]; masters.append(epochs[0])
+		# Master dates step by specified amount
+		for epoch in epochs[1:]:
+			curr_master=masters[-1]
+			if (epoch-curr_master).days>inpt.step:
+				masters.append(epoch)
+	else:
+		# No selection criteria applied to master image
+		masters=epochs[:]
+
 	# Loop through each date - earlier date will be the master
 	pairs=[]
-	for master in epochs:
+	for master in masters:
 		# Find all dates that meet interval criteria
 		intvls=[(epoch-master) for epoch in epochs]
 		slaves=[epoch for ndx,epoch in enumerate(epochs) if (intvls[ndx].days>=inpt.minIntvl) and (intvls[ndx].days<=inpt.maxIntvl)]
