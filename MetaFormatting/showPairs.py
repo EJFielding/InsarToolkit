@@ -18,6 +18,7 @@ def createParser():
 	parser.add_argument('--end-date', dest='endDate', type=int, default=None, help='Latest valid date')
 	parser.add_argument('--min-interval', dest='minIntvl', type=int, default=None, help='Minimum time interval')
 	parser.add_argument('--max-interval', dest='maxIntvl', type=int, default=None, help='Maximum time interval')
+	parser.add_argument('--months', dest='months', type=int, default=None, nargs='+', help='Specify allowable reference date months')
 
 	# Outputs
 	parser.add_argument('-p','--plot', dest='plot', action='store_true', help='Plot pairs')
@@ -92,11 +93,14 @@ def findDatePairs(inpt,files):
 			date2=str(secDate.date()).replace('-','')
 
 			pair='{}_{}'.format(date1,date2)
-			files.pairs.append(pair)
 
 			# Calculate time between dates
 			time_intvl=refDate-secDate
-			files.intvls.append(str(time_intvl.days))
+
+			# Add to list only if unique
+			if pair not in files.pairs:
+				files.pairs.append(pair)
+				files.intvls.append(str(time_intvl.days))
 
 			# Report if requested
 			if inpt.verbose is True:
@@ -105,14 +109,16 @@ def findDatePairs(inpt,files):
 
 ## Select pairs by attributes
 def selectPairs(inpt,files):
+	# Start date
 	if inpt.startDate:
-		secDates=[int(pair.split('_')[-1]) for pair in files.pairs]
+		secDates=[int(pair.split('_')[1]) for pair in files.pairs]
 		selectPairs=[files.pairs[ndx] for ndx,date in enumerate(secDates) if (date>inpt.startDate)]
 		selectIntvls=[files.intvls[ndx] for ndx,date in enumerate(secDates) if (date>inpt.startDate)]
 
 		files.pairs=selectPairs; del selectPairs
 		files.intvls=selectIntvls; del selectIntvls
 
+	# End date
 	if inpt.endDate:
 		refDates=[int(pair.split('_')[0]) for pair in files.pairs]
 		selectPairs=[files.pairs[ndx] for ndx,date in enumerate(refDates) if (date<inpt.endDate)]
@@ -121,6 +127,16 @@ def selectPairs(inpt,files):
 		files.pairs=selectPairs; del selectPairs
 		files.intvls=selectIntvls; del selectIntvls
 
+	# Allowable months
+	if inpt.months:
+		refDates=[pair.split('_')[0] for pair in files.pairs]
+		selectPairs=[files.pairs[ndx] for ndx,date in enumerate(refDates) if (int(date[4:6]) in inpt.months)]
+		selectIntvls=[files.intvls[ndx] for ndx,date in enumerate(refDates) if (int(date[4:6]) in inpt.months)]
+
+		files.pairs=selectPairs; del selectPairs
+		files.intvls=selectIntvls; del selectIntvls
+
+	# Minimum interval
 	if inpt.minIntvl:
 		intvls=[int(intvl) for intvl in files.intvls]
 		selectPairs=[files.pairs[ndx] for ndx,intvl in enumerate(intvls) if (intvl>=inpt.minIntvl)]
@@ -129,6 +145,7 @@ def selectPairs(inpt,files):
 		files.pairs=selectPairs; del selectPairs
 		files.intvls=selectIntvls; del selectIntvls
 
+	# Maximum interval
 	if inpt.maxIntvl:
 		intvls=[int(intvl) for intvl in files.intvls]
 		selectPairs=[files.pairs[ndx] for ndx,intvl in enumerate(intvls) if (intvl<=inpt.maxIntvl)]
@@ -178,6 +195,7 @@ if __name__=='__main__':
 	## Report final pairs and time intervals
 	print('Final selection:')
 	[print('{} {} days'.format(pair,files.intvls[ndx])) for ndx,pair in enumerate(files.pairs)]
+	print('{} pairs'.format(len(files.pairs)))
 
 
 	## Plot if requested

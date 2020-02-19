@@ -209,8 +209,8 @@ def plotDatePairs(pairs):
 	#  [[20190101,20181201]
 	#   [20181201,20181101]]
 
-	## Order dates earliest-latest
-	pairs.sort(key=lambda d: d[1])
+	## Order dates earliest-latest based on ref (first) date
+	pairs.sort(key=lambda d: d[0])
 
 	## Convert to datetime objects
 	int2date=lambda d: datetime.strptime(str(d),'%Y%m%d')
