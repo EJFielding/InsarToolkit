@@ -1,6 +1,7 @@
 import numpy as np 
 import matplotlib.pyplot as plt 
 from scipy.stats import mode
+from datetime import datetime
 
 
 ##########################
@@ -208,9 +209,27 @@ def plotDatePairs(pairs):
 	#  [[20190101,20181201]
 	#   [20181201,20181101]]
 
+	## Order dates earliest-latest
+	pairs.sort(key=lambda d: d[1])
+
+	## Convert to datetime objects
+	int2date=lambda d: datetime.strptime(str(d),'%Y%m%d')
+
+	timepairs=[[int2date(pair[0]),int2date(pair[1])] for pair in pairs]
+
+
+	## Plot
 	Fig=plt.figure()
 	ax=Fig.add_subplot(111)
 	n=0
-	for pair in pairs:
-		ax.plot(pair,[n,n],'-k.')
+	for timepair in timepairs:
+		ax.plot(timepair,[n,n],'k-')
 		n+=1
+
+	## Formatting
+	ax.set_yticks([])
+	plt.xticks(rotation=90)
+	ax.set_xlabel('Date')
+	ax.set_title('Date pairs (n = {})'.format(len(pairs)))
+	Fig.tight_layout()
+
