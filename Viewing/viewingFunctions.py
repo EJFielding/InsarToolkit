@@ -76,9 +76,9 @@ class mapStats:
 			plt.legend() 
 
 
-#######################
-### --- Viewing --- ###
-#######################
+###########################
+### --- Map viewing --- ###
+###########################
 
 # --- Plot single-band image ---
 def mapPlot(img,cmap='viridis',vmin=None,vmax=None,pctmin=None,pctmax=None,background=None,
@@ -196,3 +196,21 @@ def imagettes(imgs,mRows,nCols,cmap='viridis',downsampleFactor=0,vmin=None,vmax=
 			F.colorbar(cax,orientation=colorbarOrientation)
 
 		x+=1 # update counter
+
+
+#################################
+### --- Date pair viewing --- ###
+#################################
+
+# --- Plot pairs ---
+def plotDatePairs(pairs):
+	# Provide pairs as a nested list of lists, e.g.,
+	#  [[20190101,20181201]
+	#   [20181201,20181101]]
+
+	Fig=plt.figure()
+	ax=Fig.add_subplot(111)
+	n=0
+	for pair in pairs:
+		ax.plot(pair,[n,n],'-k.')
+		n+=1
