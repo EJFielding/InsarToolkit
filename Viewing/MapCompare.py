@@ -40,7 +40,7 @@ def createParser():
 	# Analysis options
 	parser.add_argument('-a','--analysis','--analysisType', dest='analysisType', type=str, default=None, help='Analysis type (polyfit, PCA)')
 	parser.add_argument('--degree', dest='degree', type=int, default=1, help='Polynomial degree for fit [default = 1]')
-	# parser.add_argument('-nbins','--nbins',dest='nbins', type=int, default=20, help='Number of bins for 2D histograms')
+	parser.add_argument('--nbins', dest='nbins', type=int, default=10, help='Number of bins for 2D histograms')
 
 	parser.add_argument('-v','--verbose', dest='verbose', action='store_true', help='Verbose mode')
 
@@ -181,7 +181,7 @@ def plotImg(inpt,img,title=None,extent=None):
 ### Compare maps ---
 class mapCompare:
 	## Format data
-	def __init__(self,baseDS,compDS,verbose=False):
+	def __init__(self,baseDS,compDS,mask=None,verbose=False):
 		self.verbose=verbose # True/False
 		self.aProps=analysisProperties # dictionary of analysis properties
 
@@ -200,8 +200,8 @@ class mapCompare:
 
 		## Compare 1D arrays
 		# Mask values
-		baseImg=np.ma.array(baseImg,mask=(inpt.commonMask==0))
-		compImg=np.ma.array(compImg,mask=(inpt.commonMask==0))
+		baseImg=np.ma.array(baseImg,mask=(mask==0))
+		compImg=np.ma.array(compImg,mask=(mask==0))
 
 		# Flatten to 1D arrays
 		baseImg=baseImg.flatten()
@@ -230,15 +230,26 @@ class mapCompare:
 		analysisType=analysisProperties['analysisType']
 
 		if self.verbose is True:
-			print('Plotting comparison type: {}'.format(plotType))
+			print('Plotting comparison type: {}'.format(plotType.upper()))
+
+
+		# Establish figure
+		self.Fig=plt.figure()
+		self.ax=self.Fig.add_subplot(111)
 
 		# Plot data
 		plotType=plotType.lower()
 
 		if plotType in ['pts','points']:
 			self.plotPts(plotProperties)
+		elif plotType in ['hex','hexbin']:
+			self.plotHex(plotProperties)
 		elif plotType in ['hist','hist2d','histogram']:
 			self.plotHist(plotProperties)
+		elif plotType in ['kde','contour','contourf']:
+			self.plotKDE(plotProperties)
+		else:
+			print('Choose an appropriate plot type'); exit()
 
 
 		# Conduct and plot analyses
@@ -250,6 +261,13 @@ class mapCompare:
 			self.PCA(analysisProperties)
 
 
+		# Finalize figure formatting
+		if plotProperties['plotAspect']: self.ax.set_aspect(plotProperties['plotAspect'])
+		self.ax.set_xlabel('base data')
+		self.ax.set_ylabel('comparison data')
+		self.Fig.tight_layout()
+
+
 	## Data plotting --
 	# Points comparison
 	def plotPts(self,plotProperties):
@@ -257,30 +275,64 @@ class mapCompare:
 		skips=plotProperties['skips']
 		plotAspect=plotProperties['plotAspect']
 
-		# Plot point comparison
-		self.Fig=plt.figure()
-		self.ax=self.Fig.add_subplot(111)
-
-		# Plot data points
+		## Plot data points
 		self.ax.plot(self.base[::skips],self.comp[::skips],marker='.',color=(0.5,0.5,0.5),linewidth=0,zorder=1)
 
-		# Format plot
-		self.ax.set_xlabel('base data')
-		self.ax.set_ylabel('comparison data')
-		if plotAspect: self.ax.set_aspect(plotAspect)
-		self.Fig.tight_layout()
 
 	# Hexbin comparison
 	def plotHex(self,plotProperties):
 		# Parse plotProperties
 		cmap=plotProperties['cmap']
-		print('Hexbin does not work yet')
+
+		## Plot hexbin
+		cax=self.ax.hexbin(self.base,self.comp,cmap=cmap)
+		self.Fig.colorbar(cax,orientation='horizontal')
 
 
 	# Histogram comparison
 	def plotHist(self,plotProperties):
 		# Parse plotProperties
-		print('Histogram does not work yet')
+		cmap=plotProperties['cmap']
+		nbins=plotProperties['nbins']
+
+		## Construct histogram
+		H,xedges,yedges=np.histogram2d(self.base,self.comp,bins=nbins)
+		H=H.T
+		X,Y=np.meshgrid(xedges,yedges)
+
+		## Plot histogram
+		cax=self.ax.pcolormesh(X,Y,H,cmap=cmap)
+
+		self.Fig.colorbar(cax,orientation='horizontal')
+
+
+	# KDE comparison
+	def plotKDE(self,plotProperties):
+		# Parse plotProperties
+		plotType=plotProperties['plotType'] # plot type for contour contourf
+		cmap=plotProperties['cmap']
+		nbins=plotProperties['nbins']
+
+		## Compute kernel density estimate
+		from scipy.stats import gaussian_kde
+
+		x=np.linspace(self.base.min(),self.base.max(),nbins)
+		y=np.linspace(self.comp.min(),self.comp.max(),nbins)
+
+		X,Y=np.meshgrid(x,y)
+		positions=np.vstack([X.flatten(),Y.flatten()])
+		values=np.vstack([self.base.flatten(),self.comp.flatten()])
+		kernel=gaussian_kde(values)
+		H=kernel(positions)
+		H=np.reshape(H,X.shape)
+
+		## Plot KDE
+		if plotType in ['kde']:
+			cax=self.ax.pcolormesh(X,Y,H,cmap=cmap)
+		elif plotType in ['contour']:
+			cax=self.ax.contour(X,Y,H,cmap=cmap)
+		elif plotType in ['contourf']:
+			cax=self.ax.contourf(X,Y,H,cmap=cmap)
 
 
 	## Analyses --
@@ -402,48 +454,30 @@ if __name__=='__main__':
 	compDS=gdal.Open(inpt.compName,gdal.GA_ReadOnly)
 
 
-	## Pre-format data sets
+	## Pre-format data sets - sample to same map bounds and resolution
 	baseDS,compDS=preFormat(inpt,baseDS,compDS)
 
 
-	## Mask background values
+	## Mask background and other values
 	inpt.commonMask=createMask(inpt,baseDS,compDS)
 
 
 	## Plot input images
 	if inpt.plotMaps is True:
-		# Plot base data set
 		plotDatasets(inpt,baseDS,compDS)
 
 
 	## Compare two data sets
 	# Format plot properties
-	plotProperties=dict(plotType=inpt.plotType,skips=inpt.skips,plotAspect=inpt.plotAspect,cmap=inpt.cmap)
+	plotProperties=dict(plotType=inpt.plotType,skips=inpt.skips,plotAspect=inpt.plotAspect,cmap=inpt.cmap,nbins=inpt.nbins)
 
 	# Format analysis properties
 	analysisProperties=dict(analysisType=inpt.analysisType,degree=inpt.degree)
 
 	# Conduct comparison
-	comparison=mapCompare(baseDS,compDS,verbose=inpt.verbose)
+	comparison=mapCompare(baseDS,compDS,mask=inpt.commonMask,verbose=inpt.verbose)
 	comparison.plotComparison(plotProperties=plotProperties,\
 		analysisProperties=analysisProperties)
 
-
-	# ## Plot Comparisons
-	# # Establish figure
-	# F=plt.figure()
-	# ax=F.add_subplot(111)
-
-	# # Plot points
-	# if inpt.figtype.lower() in ['points','pts']:
-	# 	dsamp=int(2**inpt.ds_factor) # downsample factor
-	# 	ax.plot(indepImg[::dsamp],depImg[::dsamp],'b.')
-
-	# # Plot 2D histogram
-	# if inpt.figtype.lower() in ['histogram','hist']:
-	# 	H,xedges,yedges=np.histogram2d(indepImg,depImg,bins=inpt.nbins)
-	# 	H=H.T
-	# 	X,Y=np.meshgrid(xedges,yedges)
-	# 	ax.pcolormesh(X,Y,H)
 
 	plt.show()
