@@ -99,11 +99,12 @@ if __name__=='__main__':
 	inpt.N=100 # EW nb pixels
 
 	# Function
-	inpt.ImgFcn=lambda img,X,Y: 20*(X-X.min())*img + 20*(Y-Y.min())*img
+	# inpt.ImgFcn=lambda img,X,Y: 20*(X-X.min())*img + 20*(Y-Y.min())*img
 	#inpt.ImgFcn=lambda img,X,Y: img
+	inpt.ImgFcn=lambda img,X,Y: np.sign(np.sin(2*np.pi*1*(X)/0.000833/100) + np.sin(2*np.pi*1*(Y)/0.000833/100))
 
 	# Other
-	inpt.savename='/Users/rzinke/Documents/Tibet/ParameterComparisons/SynthTests/XY'
+	inpt.savename='/Users/rzinke/Documents/Tibet/ParameterComparisons/SynthTests/Lumpy2'
 
 
 	## Create map

@@ -38,9 +38,11 @@ def createParser():
 	parser.add_argument('-s','--skips', dest='skips', type=int, default=1, help='Skip by this value when plotting points')
 	parser.add_argument('--aspect','--plotAspect', dest='plotAspect', type=float, default=None, help='Comparison plot aspect ratio')
 	# Analysis options
-	parser.add_argument('-a','--analysis','--analysisType', dest='analysisType', type=str, default=None, help='Analysis type (polyfit, PCA)')
+	parser.add_argument('-a','--analysis','--analysisType', dest='analysisType', type=str, default=None, help='Analysis type (polyfit, PCA, kmeans)')
 	parser.add_argument('--degree', dest='degree', type=int, default=1, help='Polynomial degree for fit [default = 1]')
 	parser.add_argument('--nbins', dest='nbins', type=int, default=10, help='Number of bins for 2D histograms')
+	parser.add_argument('-k','--clusters','--kclusters', dest='kclusters', type=int, default=2, help='Number of clusters for k-means cluster analysis')
+	parser.add_argument('--max-iterations', dest='maxIterations', type=int, default=20, help='Max number of iterations for k-means cluster analysis')
 
 	parser.add_argument('-v','--verbose', dest='verbose', action='store_true', help='Verbose mode')
 
@@ -177,6 +179,43 @@ def plotImg(inpt,img,title=None,extent=None):
 	Fig.colorbar(cax,orientation='horizontal')
 
 
+def computeKmeans(data,k,max_iterations):
+		# Setup
+		dataMin=np.min(data,axis=0)
+		dataMax=np.max(data,axis=0)
+		dataShape=data.shape
+		np.random.seed(0)
+		Dists=np.zeros((dataShape[0],k))
+		# Pick initial centroids
+		Centroids=np.linspace(dataMin,dataMax,k)
+		Centroids_new=np.zeros((k,dataShape[1]))
+		# Find closest centroids
+		def find_closest_centroid(data,k):
+			for i in range(k):
+				# Subract each centroid from the data
+				#  and compute Euclidean distance
+				Dists[:,i]=np.linalg.norm(data-Centroids[i,:],
+					ord=2,axis=1)
+			return Dists
+		# Loop through iterations
+		while(max_iterations): # for each iteration...
+		# 1. Calculate distance to points
+			Dists=find_closest_centroid(data,k)
+			Centroid_ndx=np.argmin(Dists,axis=1)
+		# 2. Assign data points to centroids
+			for j in range(k):
+				cluster_mean=np.mean(data[Centroid_ndx==j],axis=0)
+				Centroids_new[j,:]=cluster_mean
+			if not np.sum(Centroids_new-Centroids):
+				break
+			Centroids=Centroids_new
+			max_iterations-=1
+		# Plot
+		Dists=find_closest_centroid(data,k) # final calculation
+		Centroid_ndx=np.argmin(Dists,axis=1) # final indices
+		return Centroids
+
+
 
 ### Compare maps ---
 class mapCompare:
@@ -259,6 +298,8 @@ class mapCompare:
 			self.polyFit(analysisProperties)
 		elif analysisType in ['pca']:
 			self.PCA(analysisProperties)
+		elif analysisType in ['kmeans','cluster','clusters','kcluster','kclusters']:
+			self.clusterAnalysis(analysisProperties)
 
 
 		# Finalize figure formatting
@@ -440,6 +481,31 @@ class mapCompare:
 		self.ax.text(0.05,0.85,textstr,transform=self.ax.transAxes)
 
 
+	# K-means cluster analysis
+	def clusterAnalysis(self,analysisProperties):
+		## K-clusters
+		# Parse analysis properties
+		k=analysisProperties['kclusters']
+		max_iterations=analysisProperties['maxIterations']
+
+		# Format data
+		data=np.hstack([self.base.reshape(-1,1),self.comp.reshape(-1,1)])
+
+		# Compute kmeans
+		centroids=computeKmeans(data,k,max_iterations)
+
+		# Report if requested
+		if self.verbose is True:
+			print('{} clusters computed'.format(k))
+			print('Centroids:\n')
+			[print('\t{}'.format(centroid)) for centroid in centroids]
+
+
+		## Plot cluster centers
+		for centroid in centroids:
+			self.ax.plot(centroid[0],centroid[1],'bo')
+
+
 
 ### MAIN FUNCTION ---
 if __name__=='__main__':
@@ -472,7 +538,7 @@ if __name__=='__main__':
 	plotProperties=dict(plotType=inpt.plotType,skips=inpt.skips,plotAspect=inpt.plotAspect,cmap=inpt.cmap,nbins=inpt.nbins)
 
 	# Format analysis properties
-	analysisProperties=dict(analysisType=inpt.analysisType,degree=inpt.degree)
+	analysisProperties=dict(analysisType=inpt.analysisType,degree=inpt.degree,kclusters=inpt.kclusters,maxIterations=inpt.maxIterations)
 
 	# Conduct comparison
 	comparison=mapCompare(baseDS,compDS,mask=inpt.commonMask,verbose=inpt.verbose)
