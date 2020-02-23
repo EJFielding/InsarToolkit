@@ -46,6 +46,8 @@ def createParser():
 
 	parser.add_argument('-v','--verbose', dest='verbose', action='store_true', help='Verbose mode')
 
+	parser.add_argument('-o','--outName', dest='outName', type=str, default=None, help='Output name, for difference map and analysis plots')
+
 	return parser
 
 def cmdParser(iargs = None):
@@ -163,22 +165,8 @@ def plotDatasets(inpt,baseDS,compDS):
 	axComp.set_title('Comparison')
 
 
-## Plot image
-def plotImg(inpt,img,title=None,extent=None):
-	# Format image
-	img=np.ma.array(img,mask=(inpt.commonMask==0))
-	stats=mapStats(img,pctmin=inpt.pctmin,pctmax=inpt.pctmax)
 
-	# Plot
-	Fig=plt.figure()
-	ax=Fig.add_subplot(111)
-	cax=ax.imshow(img,cmap='jet',vmin=stats.vmin,vmax=stats.vmax,extent=extent)
-
-	# Format
-	ax.set_title(title)
-	Fig.colorbar(cax,orientation='horizontal')
-
-
+## K-means cluster algorithm
 def computeKmeans(data,k,max_iterations):
 		# Setup
 		dataMin=np.min(data,axis=0)
@@ -219,29 +207,32 @@ def computeKmeans(data,k,max_iterations):
 
 ### Compare maps ---
 class mapCompare:
-	## Format data
-	def __init__(self,baseDS,compDS,mask=None,verbose=False):
+	def __init__(self,baseDS,compDS,mask=None,verbose=False,outName=None):
 		self.verbose=verbose # True/False
-		self.aProps=analysisProperties # dictionary of analysis properties
+		self.outName=outName # save files to outName
 
 		# Load image bands and transforms
 		baseImg=baseDS.GetRasterBand(1).ReadAsArray()
 		compImg=compDS.GetRasterBand(1).ReadAsArray()
 
-		## Simple difference map
-		# Compute diff
-		diff=compImg-baseImg
+		self.N=baseDS.RasterXSize; self.M=baseDS.RasterYSize
+		self.Tnsf=baseDS.GetGeoTransform()
+		left=self.Tnsf[0]; dx=self.Tnsf[1]; right=left+self.N*dx
+		top=self.Tnsf[3]; dy=self.Tnsf[5]; bottom=top+self.M*dy
+		self.extent=(left, right, bottom, top)
+		self.Projection=baseDS.GetProjection()
 
-		# Plot diff
-		extent=transform2extent(baseDS)
-		plotImg(inpt,diff,title='Difference',extent=extent)
-
-
-		## Compare 1D arrays
 		# Mask values
 		baseImg=np.ma.array(baseImg,mask=(mask==0))
 		compImg=np.ma.array(compImg,mask=(mask==0))
 
+
+		## Simple difference map
+		# Compute diff
+		self.Diff=baseImg-compImg
+
+
+		## Compare 1D arrays
 		# Flatten to 1D arrays
 		baseImg=baseImg.flatten()
 		compImg=compImg.flatten()
@@ -260,6 +251,34 @@ class mapCompare:
 		if self.verbose is True:
 			print('Base mean {:.4f}; std {:.4f}'.format(self.baseMean,self.baseStd))
 			print('Comparison mean {:.4f}; std {:.4f}'.format(self.compMean,self.compStd))
+
+
+	## Plot difference
+	def plotDiff(self,pctmin=0,pctmax=100):
+		# Formatting
+		vmin,vmax=np.percentile(self.Diff.compressed(),[pctmin,pctmax])
+
+		# Spawn figure
+		Fig=plt.figure()
+		ax=Fig.add_subplot(111)
+
+		# Plot map
+		cax=ax.imshow(self.Diff,cmap='jet',vmin=vmin,vmax=vmax,extent=self.extent)
+		ax.set_title('Difference (base - comparison)')
+		Fig.colorbar(cax,orientation='horizontal')
+
+		# Save if requested
+		if self.outName:
+			savename='{}_DifferenceMap.tif'.format(self.outName)
+			driver=gdal.GetDriverByName('GTiff')
+			DSout=driver.Create(savename,self.N,self.M,1,gdal.GDT_Float32)
+			DSout.GetRasterBand(1).WriteArray(self.Diff)
+			DSout.SetProjection(self.Projection)
+			DSout.SetGeoTransform(self.Tnsf)
+			DSout.FlushCache()
+
+			if self.verbose is True:
+				print('Saved to: {}'.format(savename))
 
 
 	## Plot comparison
@@ -307,6 +326,17 @@ class mapCompare:
 		self.ax.set_xlabel('base data')
 		self.ax.set_ylabel('comparison data')
 		self.Fig.tight_layout()
+
+		# Save figure
+		if self.outName:
+			savename='{}_{}'.format(self.outName,plotType)
+			if analysisType: savename+='_{}'.format(analysisType)
+			savename+='.png'
+			self.Fig.savefig(savename,dpi=600)
+
+			# Report if requested
+			if self.verbose is True:
+				print('Saved analysis fig to: {}'.format(savename))
 
 
 	## Data plotting --
@@ -374,6 +404,7 @@ class mapCompare:
 			cax=self.ax.contour(X,Y,H,cmap=cmap)
 		elif plotType in ['contourf']:
 			cax=self.ax.contourf(X,Y,H,cmap=cmap)
+		self.Fig.colorbar(cax,orientation='horizontal')
 
 
 	## Analyses --
@@ -541,7 +572,8 @@ if __name__=='__main__':
 	analysisProperties=dict(analysisType=inpt.analysisType,degree=inpt.degree,kclusters=inpt.kclusters,maxIterations=inpt.maxIterations)
 
 	# Conduct comparison
-	comparison=mapCompare(baseDS,compDS,mask=inpt.commonMask,verbose=inpt.verbose)
+	comparison=mapCompare(baseDS,compDS,mask=inpt.commonMask,verbose=inpt.verbose,outName=inpt.outName)
+	comparison.plotDiff(pctmin=inpt.pctmin,pctmax=inpt.pctmax)
 	comparison.plotComparison(plotProperties=plotProperties,\
 		analysisProperties=analysisProperties)
 
