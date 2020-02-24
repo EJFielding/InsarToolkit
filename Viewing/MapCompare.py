@@ -24,6 +24,8 @@ def createParser():
 	# Map options
 	parser.add_argument('-b','--bounds', dest='bounds', type=str, default=None, help='Map bounds (minX, minY, maxX, maxY)')
 	parser.add_argument('-ds','--downsample','--dsFactor', dest='dsFactor', type=int, default=0, help='Downsample factor (power of two)')
+	# Scaling
+	parser.add_argument('-cs','--centerscale','--center-scale', dest='centerscale', action='store_true', help='Center and scale data set (True/[False])')
 	# Masking
 	parser.add_argument('-bg','--background', dest='background', default=None, help='Background value for both maps')
 	parser.add_argument('--bgBase', dest='bgBase', default=None, help='Background value for base image')
@@ -43,6 +45,7 @@ def createParser():
 	parser.add_argument('--nbins', dest='nbins', type=int, default=10, help='Number of bins for 2D histograms')
 	parser.add_argument('-k','--clusters','--kclusters', dest='kclusters', type=int, default=1, help='Number of clusters for k-means cluster analysis')
 	parser.add_argument('--max-iterations', dest='maxIterations', type=int, default=20, help='Max number of iterations for k-means cluster analysis')
+	parser.add_argument('--kbins', dest='kbins', type=int, default=20, help='Number of bins to use in data histogram')
 
 	parser.add_argument('-v','--verbose', dest='verbose', action='store_true', help='Verbose mode')
 
@@ -212,7 +215,7 @@ def computeKmeans(data,k,max_iterations):
 
 ### Compare maps ---
 class mapCompare:
-	def __init__(self,baseDS,compDS,mask=None,verbose=False,outName=None):
+	def __init__(self,baseDS,compDS,mask=None,centerscale=False,verbose=False,outName=None):
 		self.verbose=verbose # True/False
 		self.outName=outName # save files to outName
 
@@ -230,6 +233,11 @@ class mapCompare:
 		# Mask values
 		baseImg=np.ma.array(baseImg,mask=(mask==0))
 		compImg=np.ma.array(compImg,mask=(mask==0))
+
+		# Center and scale
+		if centerscale is True:
+			baseImg=(baseImg-np.mean(baseImg))/np.std(baseImg)
+			compImg=(compImg-np.mean(compImg))/np.std(compImg)
 
 
 		## Simple difference map
@@ -559,13 +567,13 @@ class mapCompare:
 			ax=Fig.add_subplot(k,1,i+1)
 			ax.fill(Hcntrs,H,'b',zorder=1)
 			ax.set_yticks([]); ax.set_ylabel('freq')
-			ax.text(0.75,0.85,'Centroid {}'.format(i),transform=self.ax.transAxes)
+			ax.text(0.75,0.85,'Centroid {}'.format(i),transform=ax.transAxes)
 
 			# Compute and plot percentiles
 			pcts=np.percentile(centroidDists[i],percentiles)
 			for j,pct in enumerate(pcts):
 				ax.axvline(pct,color=(0.6,0.6,0.6),zorder=2)
-				ax.text(pct,0,percentiles[j])
+				ax.text(pct,0,percentiles[j],color=(0.9,0.5,0.0))
 		ax.set_xlabel('distance from centroid')
 
 
@@ -601,10 +609,10 @@ if __name__=='__main__':
 	plotProperties=dict(plotType=inpt.plotType,skips=inpt.skips,plotAspect=inpt.plotAspect,cmap=inpt.cmap,nbins=inpt.nbins)
 
 	# Format analysis properties
-	analysisProperties=dict(analysisType=inpt.analysisType,degree=inpt.degree,kclusters=inpt.kclusters,maxIterations=inpt.maxIterations,nbins=inpt.nbins)
+	analysisProperties=dict(analysisType=inpt.analysisType,degree=inpt.degree,kclusters=inpt.kclusters,maxIterations=inpt.maxIterations,nbins=inpt.kbins)
 
 	# Conduct comparison
-	comparison=mapCompare(baseDS,compDS,mask=inpt.commonMask,verbose=inpt.verbose,outName=inpt.outName)
+	comparison=mapCompare(baseDS,compDS,mask=inpt.commonMask,centerscale=inpt.centerscale,verbose=inpt.verbose,outName=inpt.outName)
 	comparison.plotDiff(pctmin=inpt.pctmin,pctmax=inpt.pctmax)
 	comparison.plotComparison(plotProperties=plotProperties,\
 		analysisProperties=analysisProperties)
