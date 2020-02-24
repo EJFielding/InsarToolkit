@@ -41,7 +41,7 @@ def createParser():
 	parser.add_argument('-a','--analysis','--analysisType', dest='analysisType', type=str, default=None, help='Analysis type (polyfit, PCA, kmeans)')
 	parser.add_argument('--degree', dest='degree', type=int, default=1, help='Polynomial degree for fit [default = 1]')
 	parser.add_argument('--nbins', dest='nbins', type=int, default=10, help='Number of bins for 2D histograms')
-	parser.add_argument('-k','--clusters','--kclusters', dest='kclusters', type=int, default=2, help='Number of clusters for k-means cluster analysis')
+	parser.add_argument('-k','--clusters','--kclusters', dest='kclusters', type=int, default=1, help='Number of clusters for k-means cluster analysis')
 	parser.add_argument('--max-iterations', dest='maxIterations', type=int, default=20, help='Max number of iterations for k-means cluster analysis')
 
 	parser.add_argument('-v','--verbose', dest='verbose', action='store_true', help='Verbose mode')
@@ -178,7 +178,7 @@ def computeKmeans(data,k,max_iterations):
 		Centroids=np.linspace(dataMin,dataMax,k)
 		Centroids_new=np.zeros((k,dataShape[1]))
 		# Find closest centroids
-		def find_closest_centroid(data,k):
+		def find_closest_centroid(data,Centroids,Dists,k):
 			for i in range(k):
 				# Subract each centroid from the data
 				#  and compute Euclidean distance
@@ -188,20 +188,25 @@ def computeKmeans(data,k,max_iterations):
 		# Loop through iterations
 		while(max_iterations): # for each iteration...
 		# 1. Calculate distance to points
-			Dists=find_closest_centroid(data,k)
+			Dists=find_closest_centroid(data,Centroids,Dists,k)
 			Centroid_ndx=np.argmin(Dists,axis=1)
 		# 2. Assign data points to centroids
 			for j in range(k):
 				cluster_mean=np.mean(data[Centroid_ndx==j],axis=0)
 				Centroids_new[j,:]=cluster_mean
 			if not np.sum(Centroids_new-Centroids):
-				break
-			Centroids=Centroids_new
+				Centroids=Centroids_new; break
+			Centroids=Centroids_new.copy()
 			max_iterations-=1
-		# Plot
-		Dists=find_closest_centroid(data,k) # final calculation
-		Centroid_ndx=np.argmin(Dists,axis=1) # final indices
-		return Centroids
+
+		# List of distances to each centroid's points
+		CentroidDists=[]
+		Centroid_ndx=np.argmin(Dists,axis=1)
+		for i in range(k):
+			clusterDists=Dists[Centroid_ndx==i]
+			CentroidDists.append(clusterDists[:,i])
+		
+		return Centroids, CentroidDists
 
 
 
@@ -518,12 +523,13 @@ class mapCompare:
 		# Parse analysis properties
 		k=analysisProperties['kclusters']
 		max_iterations=analysisProperties['maxIterations']
+		nbins=analysisProperties['nbins']
 
 		# Format data
 		data=np.hstack([self.base.reshape(-1,1),self.comp.reshape(-1,1)])
 
 		# Compute kmeans
-		centroids=computeKmeans(data,k,max_iterations)
+		centroids,centroidDists=computeKmeans(data,k,max_iterations)
 
 		# Report if requested
 		if self.verbose is True:
@@ -535,6 +541,32 @@ class mapCompare:
 		## Plot cluster centers
 		for centroid in centroids:
 			self.ax.plot(centroid[0],centroid[1],'bo')
+
+		# Plot distance distribution to each centroid
+		percentiles=[68,95,98]
+
+		Fig=plt.figure()
+		for i in range(k):
+			# Compute histogram for distances to each centroid
+			H,Hedges=np.histogram(centroidDists[i],bins=nbins)
+			Hcntrs=(Hedges[:-1]+Hedges[1:])/2 
+
+			# Pad arrays for plotting
+			Hcntrs=np.pad(Hcntrs,(1,1),'edge')
+			H=np.pad(H,(1,1),'constant')
+
+			# Plot distance histogram
+			ax=Fig.add_subplot(k,1,i+1)
+			ax.fill(Hcntrs,H,'b',zorder=1)
+			ax.set_yticks([]); ax.set_ylabel('freq')
+			ax.text(0.75,0.85,'Centroid {}'.format(i),transform=self.ax.transAxes)
+
+			# Compute and plot percentiles
+			pcts=np.percentile(centroidDists[i],percentiles)
+			for j,pct in enumerate(pcts):
+				ax.axvline(pct,color=(0.6,0.6,0.6),zorder=2)
+				ax.text(pct,0,percentiles[j])
+		ax.set_xlabel('distance from centroid')
 
 
 
@@ -569,7 +601,7 @@ if __name__=='__main__':
 	plotProperties=dict(plotType=inpt.plotType,skips=inpt.skips,plotAspect=inpt.plotAspect,cmap=inpt.cmap,nbins=inpt.nbins)
 
 	# Format analysis properties
-	analysisProperties=dict(analysisType=inpt.analysisType,degree=inpt.degree,kclusters=inpt.kclusters,maxIterations=inpt.maxIterations)
+	analysisProperties=dict(analysisType=inpt.analysisType,degree=inpt.degree,kclusters=inpt.kclusters,maxIterations=inpt.maxIterations,nbins=inpt.nbins)
 
 	# Conduct comparison
 	comparison=mapCompare(baseDS,compDS,mask=inpt.commonMask,verbose=inpt.verbose,outName=inpt.outName)
