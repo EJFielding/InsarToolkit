@@ -166,6 +166,7 @@ def plotDatasets(inpt,baseDS,compDS):
 	axComp.set_yticks([])
 	Fig.colorbar(caxComp,orientation='horizontal')
 	axComp.set_title('Comparison')
+	Fig.tight_layout()
 
 
 
