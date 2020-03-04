@@ -190,30 +190,56 @@ def cumulativeTime(datePairs,absTime=True):
 ########################
 
 # Triplets
-def createTriplets(dates,minTime=None,maxTime=None,verbose=False):
+def createTriplets(dates,lags=1,minTime=None,maxTime=None,verbose=False):
 	"""
 		Provide a list of unique dates in format YYYYMMDD. This
 		 function will create a list of the (n1-n0, n2-n1, n2-n0)
 		 phase triplets. 
 		It does not accept a list of pairs like the "formatTriplets"
 		 function below.
+
+		Lags is the minimum interval from one acquisition to the 
+		 next. For instance:
+			lags=1 gives [n1-n0, n2-n1, n0-n2]
+			lags=2 gives [n2-n0, n4-n2, n0-n4]
+			lags=3 gives [n3-n0, n6-n3, n0-n6]
 	"""
 
 	# Loop through dates to create valid triplet combinations
 	nDates=len(dates)
 	triplets=[]
-	for n in range(nDates-2):
+	for n in range(nDates-2*lags):
 		dateI=dates[n] # first date in sequence
-		dateJ=dates[n+1] # second date in sequence
-		dateK=dates[n+2] # third date in sequence
+		dateJ=dates[n+lags] # second date in sequence
+		dateK=dates[n+2*lags] # third date in sequence
 		pairList=[[dateI,dateJ],[dateJ,dateK],[dateI,dateK]]
 		triplets.append(pairList) # add to list
+
+	# Check that pairs meet time requirements
+	if minTime:
+		# Convert pairs to intervals in days
+		intervals=[]
+		for triplet in triplets:
+			intervalSet=[daysBetween(pair[0],pair[1]) for pair in triplet]
+			intervals.append(min(intervalSet))
+		validTriplets=[triplet for ndx,triplet in enumerate(triplets) if intervals[ndx]>=int(minTime)]
+		triplets=validTriplets
+
+	if maxTime:
+		# Convert pairs to intervals in days
+		intervals=[]
+		for triplet in triplets:
+			intervalSet=[daysBetween(pair[0],pair[1]) for pair in triplet]
+			intervals.append(max(intervalSet))
+		print(intervals)
+		validTriplets=[triplet for ndx,triplet in enumerate(triplets) if intervals[ndx]<=int(maxTime)]
+		triplets=validTriplets
 
 	# Print if requested
 	if verbose is True:
 		print('Triplets...')
 		print('{} unique dates for triplet formulation'.format(nDates))
-		[print(triplet) for triplet in triplets]
+		print('Triplets:'); [print(triplet) for triplet in triplets]
 		print('{} triplets created'.format(len(triplets)))
 
 	return triplets
