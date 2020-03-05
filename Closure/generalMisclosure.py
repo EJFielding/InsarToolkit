@@ -12,7 +12,6 @@ import os
 from glob import glob
 import numpy as np 
 import matplotlib.pyplot as plt 
-import h5py
 from datetime import datetime
 # InsarToolkit modules
 from dateFormatting import udatesFromPairs, createTriplets
@@ -30,6 +29,7 @@ def createParser():
 	parser.add_argument(dest='dataset', type=str, help='Name of folders, files, or HDF5 dataset')
 	parser.add_argument('-t','--dataType', dest='dataType', type=str, default=None, help='(Recommended) Manually specify data type (ARIA, ISCE, MintPy, [None])')
 	parser.add_argument('-s','--subDS', dest='subDS', type=str, default='unwrapPhase', help='Sub-data set [e.g., unwrapPhase_phaseClosure, default=unwrapPhase]')
+	parser.add_argument('--exclude-pairs', dest='exclPairs', type=str, nargs='+', default=None, help='Pairs to exclude \"YYYYMMDD_YYYYMMDD\"')
 
 	# Triplet formulation
 	parser.add_argument('-l','--lags', dest='lags', type=int, default=1, help='Number of lags, e.g., 2 lags = [n1-n0, n2-n1, n2-n0]')
@@ -106,10 +106,34 @@ def detectDataType(inpt):
 	if inpt.verbose is True: print('Data type: {}'.format(inpt.dataType))
 
 
+## Load data as 3D array
+def loadData(inpt):
+	if inpt.verbose is True: print('Loading data...')
+
+	# Detect data type (ARIA, ISCE, MintPy)
+	detectDataType(inpt)
+
+	# Load data based on filetype
+	if inpt.dataType=='ARIA':
+		data=loadARIA(inpt)
+	elif inpt.dataType=='ISCE':
+		data=loadISCE(inpt)
+	elif inpt.dataType=='MintPy':
+		data=loadMintPy(inpt)
+	else:
+		print('No data loaded'); exit()
+
+	return data
+
+
 ## Load ARIA data set
 def loadARIA(inpt):
 	from osgeo import gdal
 	data=dataSet()
+
+	# Exclusde files
+	if inpt.exclPairs:
+		inpt.files=[file for file in inpt.files if file.split('.')[0] not in inpt.exclPairs]
 
 	# Loop through to load each file and append to list
 	for file in inpt.files:
@@ -142,6 +166,10 @@ def loadISCE(inpt):
 	from osgeo import gdal
 	data=dataSet()
 
+	# Exclusde files
+	if inpt.exclPairs:
+		inpt.files=[file for file in inpt.files if file not in inpt.exclPairs]
+
 	# Loop through to load each file and append to list
 	for file in inpt.files:
 		# Load using gdal
@@ -170,28 +198,9 @@ def loadISCE(inpt):
 
 ## Load MintPy data set
 def loadMintPy(inpt):
+	import h5py
 	data=[]
 	print('loadMintPy does not work yet')
-
-	return data
-
-
-## Load data as 3D array
-def loadData(inpt):
-	if inpt.verbose is True: print('Loading data...')
-
-	# Detect data type (ARIA, ISCE, MintPy)
-	detectDataType(inpt)
-
-	# Load data based on filetype
-	if inpt.dataType=='ARIA':
-		data=loadARIA(inpt)
-	elif inpt.dataType=='ISCE':
-		data=loadISCE(inpt)
-	elif inpt.dataType=='MintPy':
-		data=loadMintPy(inpt)
-	else:
-		print('No data loaded'); exit()
 
 	return data
 
@@ -206,7 +215,7 @@ def calcMisclosure(inpt,data):
 	data.absMiscStack=[]
 
 	for triplet in inpt.triplets:
-		print(triplet)
+		if inpt.verbose is True: print(triplet)
 		# Triplet date pairs
 		IJdates=triplet[0]
 		JKdates=triplet[1]
@@ -247,6 +256,10 @@ def calcMisclosure(inpt,data):
 	# Cumulative misclosure
 	data.cumMisclosure=np.sum(data.miscStack,axis=0)
 	data.cumAbsMisclosure=np.sum(data.absMiscStack,axis=0)
+
+	# Use first data as reference date
+	data.refDates=[triplet[0][0] for triplet in inpt.triplets]
+	data.refDatetimes=[datetime.strptime(str(triplet[0][0]),"%Y%m%d") for triplet in inpt.triplets]
 
 
 
@@ -357,6 +370,58 @@ def plotMisclosure(inpt,data):
 
 
 
+### MISCLOSURE ANALYSIS ---
+def plotSeries(name,ax,data,series,timeAxis=False):
+	ax.plot(data.refDatetimes,series,'-k.')
+
+	ax.set_ylabel(name+'\nradians')
+	if timeAxis is False:
+		ax.set_xticklabels([])
+	else:
+		ax.set_xticks(data.refDatetimes)
+		ax.set_xticklabels(data.refDates,rotation=80)
+	
+
+## Analyze misclosure stack
+def analyzeStack(event):
+	print('Stack analysis')
+
+	# Location
+	px=event.xdata; py=event.ydata
+	px=int(round(px)); py=int(round(py))
+
+	# Report position and cumulative values
+	print('px {} py {}'.format(px,py)) # report position
+	print('Cumulative misclosure: {}'.format(data.cumMisclosure[py,px]))
+	print('Abs cumulative misclosure: {}'.format(data.cumAbsMisclosure[py,px]))
+
+	# Plot query points on maps
+	cumMiscMap.ax.cla(); cumMiscMap.plotax() # clear and replot map
+	cumMiscMap.ax.plot(px,py,color='k',marker='o',markerfacecolor='w',zorder=3)
+
+	cumAbsMiscMap.ax.cla(); cumAbsMiscMap.plotax()
+	cumAbsMiscMap.ax.plot(px,py,color='k',marker='o',markerfacecolor='w',zorder=3)
+
+	# Timeseries
+	# Plot misclosure over time
+	print('Misclosure: {}'.format(data.miscStack[:,py,px,]))
+	miscSeriesAx.cla() # misclosure
+	plotSeries('misclosure',miscSeriesAx,data,data.miscStack[:,py,px])
+	cumMiscSeriesAx.cla() # cumulative misclosure
+	plotSeries('cum. miscl.',cumMiscSeriesAx,data,np.cumsum(data.miscStack[:,py,px]))
+	absMiscSeriesAx.cla() # absolute misclosure
+	plotSeries('(abs. miscl.)',absMiscSeriesAx,data,data.absMiscStack[:,py,px])
+	cumAbsMiscSeriesAx.cla() # cumulative absolute misclosure
+	plotSeries('(cum. abs. miscl.)',cumAbsMiscSeriesAx,data,np.cumsum(data.absMiscStack[:,py,px]),
+		timeAxis=True)
+
+	# Draw outcomes
+	cumMiscMap.Fig.canvas.draw()
+	cumAbsMiscMap.Fig.canvas.draw()
+	miscSeriesFig.canvas.draw()
+
+
+
 ### MAIN CALL ---
 if __name__=='__main__':
 	## Gather arguments
@@ -412,7 +477,7 @@ if __name__=='__main__':
 
 	## Misclosure analysis
 	# Spawn misclosure figure
-	miscSeriesFig=plt.figure('Misclosure')
+	miscSeriesFig=plt.figure('Misclosure',figsize=(8,8))
 	miscSeriesAx=miscSeriesFig.add_subplot(411)
 	cumMiscSeriesAx=miscSeriesFig.add_subplot(412)
 	absMiscSeriesAx=miscSeriesFig.add_subplot(413)
