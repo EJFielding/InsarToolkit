@@ -232,4 +232,3 @@ def plotDatePairs(pairs):
 	ax.set_xlabel('Date')
 	ax.set_title('Date pairs (n = {})'.format(len(pairs)))
 	Fig.tight_layout()
-
