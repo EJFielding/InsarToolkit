@@ -12,11 +12,7 @@ import os
 from glob import glob
 import numpy as np 
 import matplotlib.pyplot as plt 
-import h5py
 from datetime import datetime
-# InsarToolkit modules
-from dateFormatting import udatesFromPairs, createTriplets
-from viewingFunctions import mapStats, imagettes
 
 
 ### PARSER ---
@@ -30,9 +26,10 @@ def createParser():
 	parser.add_argument(dest='dataset', type=str, help='Name of folders, files, or HDF5 dataset')
 	parser.add_argument('-t','--dataType', dest='dataType', type=str, default=None, help='(Recommended) Manually specify data type (ARIA, ISCE, MintPy, [None])')
 	parser.add_argument('-s','--subDS', dest='subDS', type=str, default='unwrapPhase', help='Sub-data set [e.g., unwrapPhase_phaseClosure, default=unwrapPhase]')
+	parser.add_argument('--exclude-pairs', dest='exclPairs', type=str, nargs='+', default=None, help='Pairs to exclude \"YYYYMMDD_YYYYMMDD\"')
 
 	# Triplet formulation
-	parser.add_argument('-l','--lags', dest='lags', type=int, default=1, help='Number of lags, e.g., 2 lags = [n1-n0, n2-n1, n2-n0]')
+	parser.add_argument('-l','--lags', dest='lags', type=int, default=1, help='Number of lags, e.g., 1 lags = [n1-n0, n2-n1, n2-n0]')
 	parser.add_argument('--mintime','--min-time', dest='minTime', type=str, default=None, help='Minimum time span of pairs in triplets (days)')
 	parser.add_argument('--maxtime','--max-time', dest='maxTime', type=str, default=None, help='Maximum time span of pairs in triplets (days)')
 
@@ -60,6 +57,161 @@ def createParser():
 def cmdParser(iargs = None):
 	parser = createParser()
 	return parser.parse_args(args=iargs)
+
+
+
+### ANCILLARY FUNCTIONS ---
+## Find unique dates given a list of date pairs
+def udatesFromPairs(datePairs,verbose=False):
+	allDates=[] # empty list of all dates
+	[allDates.extend(pair) for pair in datePairs]
+	nAllDates=len(allDates)
+
+	uniqueDates=[] # empty list for unique dates
+	[uniqueDates.append(d) for d in allDates if d not in uniqueDates]
+	nUniqueDates=len(uniqueDates)
+
+	if verbose is True:
+		print('Individual dates: {}'.format(nAllDates))
+		print('Unique dates: {}'.format(nUniqueDates))
+
+	return uniqueDates
+
+
+## Image processing
+# --- Image background ---
+def imgBackground(I):
+	# Use mode of background values
+	from scipy.stats import mode
+	edgeValues=np.concatenate([I[0,:],I[-1,:],I[:,0],I[:,-1]])
+	background=mode(edgeValues).mode[0] # most common value
+	return background
+
+# --- Map stats ---
+class mapStats:
+	def __init__(self,I,pctmin=0,pctmax=100,verbose=False,hist=False): 
+		# Guess at background value
+		try:
+			self.background=imgBackground(I)
+		except:
+			self.background=None
+		# Check if masked array 
+		try: 
+			I=I.compressed() 
+		except: 
+			pass 
+		# Convert to 1D array
+		I=np.reshape(I,(1,-1)).squeeze(0) # 1D array 
+		# Stats 
+		self.min=np.min(I)	     # min 
+		self.max=np.max(I)	     # max 
+		self.mean=np.mean(I)	 # mean 
+		self.median=np.median(I) # median 
+		self.std=np.std(I)       # standard deviation 
+		self.vmin,self.vmax=np.percentile(I,(pctmin,pctmax)) 
+		# Print stats 
+		if verbose is True: 
+			print('Image stats:')
+			print('\tmin: {}, max: {}'.format(self.min,self.max)) 
+			print('\tmean: {}'.format(self.mean)) 
+			print('\tmedian: {}'.format(self.median)) 
+			print('\tvmin: {}, vmax: {}'.format(self.vmin,self.vmax)) 
+			print('\tlikely background: {}'.format(self.background))
+		# Histogram 
+		if hist is not False: 
+			if type(hist)==int: 
+				nbins=hist 
+			else: 
+				nbins=50 
+			# All values 
+			H0,H0edges=np.histogram(I,bins=nbins) 
+			H0cntrs=H0edges[:-1]+np.diff(H0edges)/2 
+			# Clipped values 
+			I=I[(I>=self.vmin) & (I<=self.vmax)] 
+			H,Hedges=np.histogram(I,bins=nbins) 
+			Hcntrs=Hedges[:-1]+np.diff(Hedges)/2 
+			# Plot 
+			plt.figure() 
+			# Plot CDF 
+			plt.subplot(2,1,1) 
+			plt.axhline(pctmin/100,color=(0.5,0.5,0.5))
+			plt.axhline(pctmax/100,color=(0.5,0.5,0.5)) 
+			plt.plot(H0cntrs,np.cumsum(H0)/np.sum(H0),'k') 
+			# Pad 
+			H0cntrs=np.pad(H0cntrs,(1,1),'edge')
+			H0=np.pad(H0,(1,1),'constant') 
+			Hcntrs=np.pad(Hcntrs,(1,1),'edge')
+			H=np.pad(H,(1,1),'constant') 
+			# Plot PDF 
+			plt.subplot(2,1,2)  
+			plt.fill(H0cntrs,H0,color=(0.4,0.5,0.5),alpha=1,label='orig') 
+			plt.bar(Hcntrs,H,color='r',alpha=0.5,label='new') 
+			plt.legend()
+
+
+## Imagette plotting
+def imagettes(imgs,mRows,nCols,cmap='viridis',downsampleFactor=0,vmin=None,vmax=None,pctmin=None,pctmax=None,colorbarOrientation=None,background=None,
+	extent=None,showExtent=False,titleList=None,supTitle=None):
+	# If images are in a list, convert to 3D data cube
+	if len(imgs)>1:
+		imgs=np.array(imgs)
+
+	# Number of imagettes
+	nImgs=imgs.shape[0]
+
+	# Number of imagettes per figure
+	nbImagettes=mRows*nCols
+
+	# Loop through image list
+	x=1 # position variable
+	for i in range(nImgs):
+		# Generate new figure if needed
+		if x%nbImagettes==1:
+			F=plt.figure() # new figure
+			x=1 # reset counter
+
+		# Format image
+		img=imgs[i,:,:] # current image from list
+
+		ds=int(2**downsampleFactor) # downsample factor
+		img=img[::ds,::ds] # downsample image
+
+		if background is not None:
+			if background=='auto':
+				backgroundValue=imgBackground(img)
+			else:
+				backgroundValue=background
+			img=np.ma.array(img,mask=(img==backgroundValue))
+
+		if pctmin is not None:
+			assert vmin is None and vmax is None, 'Specify either vmin/max or pctmin/max, not both'
+			stats=mapStats(img,pctmin=pctmin,pctmax=pctmax); vminValue=stats.vmin; vmaxValue=stats.vmax 
+		else:
+			vminValue=vmin; vmaxValue=vmax
+
+		# Plot image as subplot
+		ax=F.add_subplot(mRows,nCols,x)
+		cax=ax.imshow(img,extent=extent,
+			cmap=cmap,vmin=vminValue,vmax=vmaxValue)
+
+		# Plot formatting
+		if titleList:
+			if type(titleList[i]) in [float,np.float64]:
+				titleList[i]=round(titleList[i],2)
+			ax.set_title(titleList[i])
+		else:
+			ax.set_title(i)
+
+		if supTitle:
+			F.suptitle(supTitle)
+
+		if showExtent is False:
+			ax.set_xticks([]); ax.set_yticks([])
+
+		if colorbarOrientation:
+			F.colorbar(cax,orientation=colorbarOrientation)
+
+		x+=1 # update counter
 
 
 
@@ -91,7 +243,7 @@ def detectDataType(inpt):
 	else:
 		# Auto-detect data type
 		if inpt.dataset[-3:]=='.h5': 
-			inpt.dataType='HDF5'
+			inpt.dataType='MintPy'
 		elif inpt.dataset[-4:]=='.vrt':
 			inpt.dataType='ARIA'
 		else:
@@ -121,7 +273,7 @@ def loadData(inpt):
 	elif inpt.dataType=='MintPy':
 		data=loadMintPy(inpt)
 	else:
-		print('No data loaded'); exit()
+		print('Could not identify data type - please specify explicityly.\nNo data loaded.'); exit()
 
 	return data
 
@@ -129,7 +281,11 @@ def loadData(inpt):
 ## Load ARIA data set
 def loadARIA(inpt):
 	from osgeo import gdal
-	data=dataSet()
+	data=dataSet() # instatiate data set object
+
+	# Exclude files
+	if inpt.exclPairs:
+		inpt.files=[file for file in inpt.files if file.split('.')[0] not in inpt.exclPairs]
 
 	# Loop through to load each file and append to list
 	for file in inpt.files:
@@ -160,7 +316,11 @@ def loadARIA(inpt):
 ## Load ISCE data set
 def loadISCE(inpt):
 	from osgeo import gdal
-	data=dataSet()
+	data=dataSet() # instatiate data set object
+
+	# Exclude files
+	if inpt.exclPairs:
+		inpt.files=[file for file in inpt.files if file not in inpt.exclPairs]
 
 	# Loop through to load each file and append to list
 	for file in inpt.files:
@@ -191,8 +351,106 @@ def loadISCE(inpt):
 ## Load MintPy data set
 def loadMintPy(inpt):
 	import h5py
+	data=dataSet() # instatiate dataset object
+
+	# Load HDF5 file
+	with h5py.File(inpt.files[0],'r') as DS:
+		# Report keys and data sets if requested
+		if inpt.verbose is True: 
+			print('Data sets: {}'.format(DS.keys()))
+			print('Using subset: {}'.format(inpt.subDS))
+
+		# Load data cube
+		data.ifgs=DS[inpt.subDS][:]
+
+		# Load dates
+		pairs=DS['date'][:].astype(str)
+		data.pairs=[[pair[0],pair[1]] for pair in pairs]
+
+		# Close data set
+		DS.close()	
+
+	# Exclude interferograms
+	if inpt.exclPairs:
+		# Formatted list of pair names
+		pairList=['{}_{}'.format(pair[0],pair[1]) for pair in data.pairs]
+
+		# Rebuild data cube and date list based on non-excluded pairs
+		validPairs=[]; validIFGs=[]
+		for n,pair in enumerate(pairList):
+			if pair not in inpt.exclPairs:
+				validPairs.append(data.pairs[n])
+				validIFGs.append(data.ifgs[n,:,:])
+		# Reassign valid pairs and ifgs to data object
+		data.pairs=validPairs
+		data.ifgs=np.array(validIFGs)
+
+	# Format IFGs
+	data.M,data.N=data.ifgs[0,:,:].shape # map dimensions
+	if inpt.verbose is True: print('Data array shape: {}'.format(data.ifgs.shape))
+
+	# Unique dates from pairs
+	data.dates=udatesFromPairs(data.pairs,verbose=inpt.verbose); data.dates.sort()
+	if inpt.printDates is True: print('Dates: {}'.format(data.dates))
 
 	return data
+
+
+
+### Triplets
+def createTriplets(dates,lags=1,minTime=None,maxTime=None,verbose=False):
+	"""
+		Provide a list of unique dates in format YYYYMMDD. This
+		 function will create a list of the (n1-n0, n2-n1, n2-n0)
+		 phase triplets. 
+		It does not accept a list of pairs like the "formatTriplets"
+		 function below.
+
+		Lags is the minimum interval from one acquisition to the 
+		 next. For instance:
+			lags=1 gives [n1-n0, n2-n1, n0-n2]
+			lags=2 gives [n2-n0, n4-n2, n0-n4]
+			lags=3 gives [n3-n0, n6-n3, n0-n6]
+	"""
+
+	# Loop through dates to create valid triplet combinations
+	nDates=len(dates)
+	triplets=[]
+	for n in range(nDates-2*lags):
+		dateI=dates[n] # first date in sequence
+		dateJ=dates[n+lags] # second date in sequence
+		dateK=dates[n+2*lags] # third date in sequence
+		pairList=[[dateI,dateJ],[dateJ,dateK],[dateI,dateK]]
+		triplets.append(pairList) # add to list
+
+	# Check that pairs meet time requirements
+	if minTime:
+		# Convert pairs to intervals in days
+		intervals=[]
+		for triplet in triplets:
+			intervalSet=[daysBetween(pair[0],pair[1]) for pair in triplet]
+			intervals.append(min(intervalSet))
+		validTriplets=[triplet for ndx,triplet in enumerate(triplets) if intervals[ndx]>=int(minTime)]
+		triplets=validTriplets
+
+	if maxTime:
+		# Convert pairs to intervals in days
+		intervals=[]
+		for triplet in triplets:
+			intervalSet=[daysBetween(pair[0],pair[1]) for pair in triplet]
+			intervals.append(max(intervalSet))
+		print(intervals)
+		validTriplets=[triplet for ndx,triplet in enumerate(triplets) if intervals[ndx]<=int(maxTime)]
+		triplets=validTriplets
+
+	# Print if requested
+	if verbose is True:
+		print('Triplets...')
+		print('{} unique dates for triplet formulation'.format(nDates))
+		print('Triplets:'); [print(triplet) for triplet in triplets]
+		print('{} triplets created'.format(len(triplets)))
+
+	return triplets
 
 
 
@@ -205,7 +463,7 @@ def calcMisclosure(inpt,data):
 	data.absMiscStack=[]
 
 	for triplet in inpt.triplets:
-		print(triplet)
+		if inpt.verbose is True: print(triplet)
 		# Triplet date pairs
 		IJdates=triplet[0]
 		JKdates=triplet[1]
@@ -246,6 +504,10 @@ def calcMisclosure(inpt,data):
 	# Cumulative misclosure
 	data.cumMisclosure=np.sum(data.miscStack,axis=0)
 	data.cumAbsMisclosure=np.sum(data.absMiscStack,axis=0)
+
+	# Use first data as reference date
+	data.refDates=[triplet[0][0] for triplet in inpt.triplets]
+	data.refDatetimes=[datetime.strptime(str(triplet[0][0]),"%Y%m%d") for triplet in inpt.triplets]
 
 
 
@@ -356,6 +618,58 @@ def plotMisclosure(inpt,data):
 
 
 
+### MISCLOSURE ANALYSIS ---
+def plotSeries(name,ax,data,series,timeAxis=False):
+	ax.plot(data.refDatetimes,series,'-k.')
+
+	ax.set_ylabel(name+'\nradians')
+	if timeAxis is False:
+		ax.set_xticklabels([])
+	else:
+		ax.set_xticks(data.refDatetimes)
+		ax.set_xticklabels(data.refDates,rotation=80)
+	
+
+## Analyze misclosure stack
+def analyzeStack(event):
+	print('Stack analysis')
+
+	# Location
+	px=event.xdata; py=event.ydata
+	px=int(round(px)); py=int(round(py))
+
+	# Report position and cumulative values
+	print('px {} py {}'.format(px,py)) # report position
+	print('Cumulative misclosure: {}'.format(data.cumMisclosure[py,px]))
+	print('Abs cumulative misclosure: {}'.format(data.cumAbsMisclosure[py,px]))
+
+	# Plot query points on maps
+	cumMiscMap.ax.cla(); cumMiscMap.plotax() # clear and replot map
+	cumMiscMap.ax.plot(px,py,color='k',marker='o',markerfacecolor='w',zorder=3)
+
+	cumAbsMiscMap.ax.cla(); cumAbsMiscMap.plotax()
+	cumAbsMiscMap.ax.plot(px,py,color='k',marker='o',markerfacecolor='w',zorder=3)
+
+	# Timeseries
+	# Plot misclosure over time
+	print('Misclosure: {}'.format(data.miscStack[:,py,px,]))
+	miscSeriesAx.cla() # misclosure
+	plotSeries('misclosure',miscSeriesAx,data,data.miscStack[:,py,px])
+	cumMiscSeriesAx.cla() # cumulative misclosure
+	plotSeries('cum. miscl.',cumMiscSeriesAx,data,np.cumsum(data.miscStack[:,py,px]))
+	absMiscSeriesAx.cla() # absolute misclosure
+	plotSeries('(abs. miscl.)',absMiscSeriesAx,data,data.absMiscStack[:,py,px])
+	cumAbsMiscSeriesAx.cla() # cumulative absolute misclosure
+	plotSeries('(cum. abs. miscl.)',cumAbsMiscSeriesAx,data,np.cumsum(data.absMiscStack[:,py,px]),
+		timeAxis=True)
+
+	# Draw outcomes
+	cumMiscMap.Fig.canvas.draw()
+	cumAbsMiscMap.Fig.canvas.draw()
+	miscSeriesFig.canvas.draw()
+
+
+
 ### MAIN CALL ---
 if __name__=='__main__':
 	## Gather arguments
@@ -411,7 +725,7 @@ if __name__=='__main__':
 
 	## Misclosure analysis
 	# Spawn misclosure figure
-	miscSeriesFig=plt.figure('Misclosure')
+	miscSeriesFig=plt.figure('Misclosure',figsize=(8,8))
 	miscSeriesAx=miscSeriesFig.add_subplot(411)
 	cumMiscSeriesAx=miscSeriesFig.add_subplot(412)
 	absMiscSeriesAx=miscSeriesFig.add_subplot(413)
