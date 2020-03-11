@@ -78,8 +78,7 @@ def udatesFromPairs(datePairs,verbose=False):
 	return uniqueDates
 
 
-## Image processing
-# --- Image background ---
+## Image background
 def imgBackground(I):
 	# Use mode of background values
 	from scipy.stats import mode
@@ -87,7 +86,8 @@ def imgBackground(I):
 	background=mode(edgeValues).mode[0] # most common value
 	return background
 
-# --- Map stats ---
+
+## Map stats
 class mapStats:
 	def __init__(self,I,pctmin=0,pctmax=100,verbose=False,hist=False): 
 		# Guess at background value
@@ -212,6 +212,36 @@ def imagettes(imgs,mRows,nCols,cmap='viridis',downsampleFactor=0,vmin=None,vmax=
 			F.colorbar(cax,orientation=colorbarOrientation)
 
 		x+=1 # update counter
+
+
+def plotDatePairs(pairs):
+	# Provide pairs as a nested list of lists, e.g.,
+	#  [[20190101,20181201]
+	#   [20181201,20181101]]
+
+	## Order dates earliest-latest based on ref (first) date
+	pairs.sort(key=lambda d: d[0])
+
+	## Convert to datetime objects
+	int2date=lambda d: datetime.strptime(str(d),'%Y%m%d')
+
+	timepairs=[[int2date(pair[0]),int2date(pair[1])] for pair in pairs]
+
+
+	## Plot
+	Fig=plt.figure()
+	ax=Fig.add_subplot(111)
+	n=0
+	for timepair in timepairs:
+		ax.plot(timepair,[n,n],'k-')
+		n+=1
+
+	## Formatting
+	ax.set_yticks([])
+	plt.xticks(rotation=90)
+	ax.set_xlabel('Date')
+	ax.set_title('Date pairs (n = {})'.format(len(pairs)))
+	Fig.tight_layout()
 
 
 
