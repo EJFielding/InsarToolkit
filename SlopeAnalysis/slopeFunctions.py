@@ -88,15 +88,15 @@ def computeGradients(elev,dx,dy):
 	"""
 
 	# Define kernel type 
-	sobel=np.array([[-1+1.j,0+2.j,1+1.j],
+	sobel=np.array([[-1-1.j,0-2.j,1-1.j],
 					[-2+0.j,0+0.j,2+0.j],
-					[-1-1.j,0-2.j,1-1.j]]) 
+					[-1+1.j,0+2.j,1+1.j]]) 
 	sobel.real=sobel.real/(8*dx); sobel.imag=sobel.imag/(8*dy) 
 
 	# Calculate gradient map 
-	gradient=convolve2d(elev,sobel,mode='same')
+	gradients=convolve2d(elev,sobel,mode='same')
 
-	return gradient
+	return gradients
 
 
 ## Convert gradient to slope
@@ -155,6 +155,9 @@ def makePointingVectors(gradients):
 	py/=L
 	pz/=L
 
+	# Z-component is negative
+	pz=-pz
+
 	return px, py, pz
 
 
@@ -203,3 +206,55 @@ def pointing2aspect(px,py,pz):
 	aspect[aspect<0]+=360; aspect=aspect%360
 
 	return aspect
+
+
+
+### NORMAL VECTORS ---
+## Normal to a single vector
+def normalVector(d1,d2,d3):
+	"""
+		This function computes the normal to the vector given, with
+		 the same azimuth. The normal is calculated to satisfy the 
+		 condition < n,d > = 0
+		d is the 3-component vector that points up/down the hill slope
+		n is the 3-component vector normal to d
+	"""
+
+	# Replicate azimuth of d-vector
+	n=np.array([d1,d2,0])
+	
+	# Compute the vertical component of the normal vector
+	n[2]=-(d1**1+d2**2)/d3
+
+	# Normalize to unit length
+	n=n/np.linalg.norm(n,2)
+
+	return n
+
+
+## Normals to pointing vectors
+def normals2pointing(px,py,pz):
+	"""
+		This function computes the normal to the vector given, with
+		 the same azimuth. The normal is calculated to satisfy the 
+		 condition < n,d > = 0
+		p is the 3-component vector that points along the 
+		 topographic gradient
+		n is the 3-component vector normal to d
+	"""
+
+	# Replicate azimuth of pointing vector
+	nx=px.copy()
+	ny=py.copy()
+
+	# Compute vertical component of normal vector that satisfies
+	#	n1p1 + n2p2 + n3p3 = 0
+	nz=-(px**2+py**2)/pz
+
+	# Normalize to unit length
+	L=np.sqrt(nx**2+ny**2+nz**2)
+	nx/=L
+	ny/=L
+	nz/=L
+
+	return nx, ny, nz
