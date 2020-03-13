@@ -27,9 +27,10 @@ def createParser():
 	# Scaling
 	parser.add_argument('-cs','--centerscale','--center-scale', dest='centerscale', action='store_true', help='Center and scale data set (True/[False])')
 	# Masking
-	parser.add_argument('-bg','--background', dest='background', default=None, help='Background value for both maps')
-	parser.add_argument('--bgBase', dest='bgBase', default=None, help='Background value for base image')
-	parser.add_argument('--bgComp', dest='bgComp', default=None, help='Background value for comparison image')
+	parser.add_argument('-m','--mask', dest='maskDS', default=None, help='Georeferenced binary raster, 1 = valid; 0 = invalid')
+	parser.add_argument('-bg','--background', dest='background', default=None, nargs='+', help='Background value for both maps')
+	parser.add_argument('-bgBase','--bgBase', dest='bgBase', default=None, nargs='+', help='Background value for base image')
+	parser.add_argument('-bgComp','--bgComp', dest='bgComp', default=None, nargs='+', help='Background value for comparison image')
 	# Map plot options
 	parser.add_argument('-p','--plotMaps', dest='plotMaps', action='store_true', help='Plot maps')
 	parser.add_argument('-c','--cmap','--colormap', dest='cmap', type=str, default='viridis', help='Colormap')
@@ -43,7 +44,7 @@ def createParser():
 	parser.add_argument('-a','--analysis','--analysisType', dest='analysisType', type=str, default=None, help='Analysis type (polyfit, PCA, kmeans)')
 	parser.add_argument('--degree', dest='degree', type=int, default=1, help='Polynomial degree for fit [default = 1]')
 	parser.add_argument('--nbins', dest='nbins', type=int, default=10, help='Number of bins for 2D histograms')
-	parser.add_argument('-k','--clusters','--kclusters', dest='kclusters', type=int, default=1, help='Number of clusters for k-means cluster analysis')
+	parser.add_argument('--clusters','--kclusters', dest='kclusters', type=int, default=1, help='Number of clusters for k-means cluster analysis')
 	parser.add_argument('--max-iterations', dest='maxIterations', type=int, default=20, help='Max number of iterations for k-means cluster analysis')
 	parser.add_argument('--kbins', dest='kbins', type=int, default=20, help='Number of bins to use in data histogram')
 
@@ -72,7 +73,7 @@ def transform2extent(DS):
 
 
 ## Adjust size and resolution of images
-def preFormat(inpt,baseDS,compDS):
+def preFormat(inpt,baseDS,compDS,maskDS=None):
 	baseTnsf=baseDS.GetGeoTransform()
 
 	## First adjust base image to desired extent/resolution
@@ -89,48 +90,77 @@ def preFormat(inpt,baseDS,compDS):
 	dx=dsFactor*baseTnsf[1]; dy=dsFactor*baseTnsf[5]
 
 	# Resample base image
-	baseDS=gdal.Warp('',baseDS,options=gdal.WarpOptions(format='MEM',xRes=dx,yRes=dy,outputBounds=inpt.bounds,resampleAlg='bilinear'))
+	baseDS=gdal.Warp('',baseDS,options=gdal.WarpOptions(format='MEM',xRes=dx,yRes=dy,
+		outputBounds=inpt.bounds,resampleAlg='bilinear'))
 
 	## Then, resample comparison image to match base image
-	compDS=gdal.Warp('',compDS,options=gdal.WarpOptions(format='MEM',xRes=dx,yRes=dy,outputBounds=inpt.bounds,resampleAlg='bilinear'))
+	compDS=gdal.Warp('',compDS,options=gdal.WarpOptions(format='MEM',xRes=dx,yRes=dy,
+		outputBounds=inpt.bounds,resampleAlg='bilinear'))
+
+	## Finally, resample mask if specified
+	if maskDS:
+		maskDS=gdal.Warp('',maskDS,options=gdal.WarpOptions(format='MEM',xRes=dx,yRes=dy,
+			outputBounds=inpt.bounds,resampleAlg='near'))
 
 	## Check that geotransforms are equal
 	baseTnsf=baseDS.GetGeoTransform(); compTnsf=compDS.GetGeoTransform()
-	if baseTnsf!=compTnsf:
-		print('!!! WARNING WARNING WARNING!!!\n\t Geo-transforms are not equal!')
+	assert baseTnsf==compTnsf, 'Geo-transforms are not equal!'
 
-	return baseDS, compDS 
+	return baseDS, compDS, maskDS
 
 
-## Masking
+## Masking by value
 def createMask(inpt,baseDS,compDS):
 	commonMask=np.ones((baseDS.RasterYSize,baseDS.RasterXSize))
 
-	# Determine all background values
-	if inpt.background=='auto':
+	# Determine if background masking is requested
+	if (inpt.background is not None) or (inpt.bgBase is not None) or (inpt.bgComp is not None):
 		baseImg=baseDS.GetRasterBand(1).ReadAsArray()
-		bgBase=imgBackground(baseImg)
-		# Apply mask
-		commonMask[baseImg==bgBase]=0
-
 		compImg=compDS.GetRasterBand(1).ReadAsArray()
-		bgComp=imgBackground(compImg)
-		# Apply mask
-		commonMask[compImg==bgComp]=0
 
-	# Mask base image
-	if inpt.bgBase is not None:
-		if inpt.bgBase=='auto':
-			baseImg=baseDS.GetRasterBand(1).ReadAsArray()
-		# Apply mask
-		commonMask[baseImg==inpt.bgBase]=0
+		# Create list of background values
+		bgBase=[]
+		bgComp=[]
 
-	# Mask comparison image
-	if inpt.bgComp is not None:
-		if inpt.bgComp=='auto':
-			compImg=compDS.GetRasterBand(1).ReadAsArray()
-		# Apply mask
-		commonMask[compImg==inpt.bgComp]=0
+
+		# Determine global background values
+		if inpt.background:
+			if 'auto' in inpt.background:
+				bgBase.append(imgBackground(baseImg))
+				bgComp.append(imgBackground(compImg))
+				inpt.background.remove('auto')
+
+			if len(inpt.background)>0:
+				[bgBase.append(float(value)) for value in inpt.background]
+				[bgComp.append(float(value)) for value in inpt.background]
+
+		# Determine base background values
+		if inpt.bgBase:
+			if 'auto' in inpt.bgBase:
+				bgBase.append(imgBackground(baseImg))
+				inpt.bgBase.remove('auto')
+
+			if len(inpt.bgBase)>0:
+				[bgBase.append(float(value)) for value in inpt.bgBase]
+
+		# Determine comp background values
+		if inpt.bgComp:
+			if 'auto' in inpt.bgComp:
+				bgComp.append(imgBackground(compImg))
+				inpt.bgComp.remove('auto')
+
+			if len(inpt.bgComp)>0:
+				[bgComp.append(float(value)) for value in inpt.bgComp]
+
+		# Report if requested
+		if inpt.verbose is True:
+			print('Background values for BASE: {}'.format(bgBase))
+			print('Background values for COMP: {}'.format(bgComp))
+
+
+		# Update common mask
+		for baseValue in bgBase: commonMask[baseImg==baseValue]=0
+		for compValue in bgComp: commonMask[compImg==compValue]=0
 
 	return commonMask
 
@@ -591,13 +621,25 @@ if __name__=='__main__':
 	# Load comparison data set
 	compDS=gdal.Open(inpt.compName,gdal.GA_ReadOnly)
 
+	# Load mask if specified
+	if inpt.maskDS:
+		maskDS=gdal.Open(inpt.maskDS,gdal.GA_ReadOnly)
+	else:
+		maskDS=None
+
 
 	## Pre-format data sets - sample to same map bounds and resolution
-	baseDS,compDS=preFormat(inpt,baseDS,compDS)
+	baseDS,compDS,maskDS=preFormat(inpt,baseDS,compDS,maskDS)
 
 
-	## Mask background and other values
+	## Mask by map and/or values
+	# Mask by value(s)
 	inpt.commonMask=createMask(inpt,baseDS,compDS)
+
+	# Mask by map
+	if inpt.maskDS:
+		mask=maskDS.GetRasterBand(1).ReadAsArray()
+		inpt.commonMask*=mask
 
 
 	## Plot input images
@@ -615,8 +657,7 @@ if __name__=='__main__':
 	# Conduct comparison
 	comparison=mapCompare(baseDS,compDS,mask=inpt.commonMask,centerscale=inpt.centerscale,verbose=inpt.verbose,outName=inpt.outName)
 	comparison.plotDiff(pctmin=inpt.pctmin,pctmax=inpt.pctmax)
-	comparison.plotComparison(plotProperties=plotProperties,\
-		analysisProperties=analysisProperties)
+	comparison.plotComparison(plotProperties=plotProperties,analysisProperties=analysisProperties)
 
 
 	plt.show()
