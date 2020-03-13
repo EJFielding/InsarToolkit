@@ -17,7 +17,7 @@ class inputs:
 
 		# Geography options
 		self.Projection='GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Latitude",NORTH],AXIS["Longitude",EAST],AUTHORITY["EPSG","4326"]]'
-		self.LatStart=34.0 # c. Los Angeles
+		self.LatStart=0.0 # c. Los Angeles
 		self.LonStart=118.0
 		self.dx=0.000833 # 3 arc sec = ~90 m
 		self.dy=0.000833
@@ -101,10 +101,11 @@ if __name__=='__main__':
 	# Function
 	# inpt.ImgFcn=lambda img,X,Y: 20*(X-X.min())*img + 20*(Y-Y.min())*img
 	#inpt.ImgFcn=lambda img,X,Y: img
-	inpt.ImgFcn=lambda img,X,Y: np.sign(np.sin(2*np.pi*1*(X)/0.000833/100) + np.sin(2*np.pi*1*(Y)/0.000833/100))
+	inpt.ImgFcn=lambda img,X,Y: -np.cos(2*np.pi*1*(X-118)/0.000833/100) + -np.cos(2*np.pi*1*(Y)/0.000833/100)
+	inpt.ImgFcn=lambda img,X,Y: np.exp(-0.5*((Y)/0.05)**2)*np.exp(-0.5*((X-118)/0.05)**2)
 
 	# Other
-	inpt.savename='/Users/rzinke/Documents/Tibet/ParameterComparisons/SynthTests/Lumpy2'
+	inpt.savename='/Users/rzinke/Documents/Tibet/ParameterComparisons/SynthTests/GaussMap'
 
 
 	## Create map

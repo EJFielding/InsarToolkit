@@ -89,14 +89,14 @@ def mapPlot(img,cmap='viridis',vmin=None,vmax=None,pctmin=None,pctmax=None,backg
 	ax=F.add_subplot(111)
 
 	# Format image
-	if pctmin is not None or pctmax is not None:
-		assert vmin is None and vmax is None, 'Specify either vmin/max or pctmin/max, not both'
-		stats=mapStats(img,pctmin=pctmin,pctmax=pctmax); vmin=stats.vmin; vmax=stats.vmax 
-
 	if background is not None:
 		if background=='auto':
 			background=imgBackground(img)
 		img=np.ma.array(img,mask=(img==background))
+
+	if pctmin is not None or pctmax is not None:
+		assert vmin is None and vmax is None, 'Specify either vmin/max or pctmin/max, not both'
+		stats=mapStats(img,pctmin=pctmin,pctmax=pctmax); vmin=stats.vmin; vmax=stats.vmax 
 
 	# Plot image
 	cax=ax.imshow(img,extent=extent,
