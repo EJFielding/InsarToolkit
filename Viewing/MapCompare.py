@@ -10,7 +10,6 @@
 import numpy as np 
 import matplotlib.pyplot as plt 
 from osgeo import gdal 
-from geoFormatting import GDALtransform
 from viewingFunctions import imgBackground, mapStats
 
 
