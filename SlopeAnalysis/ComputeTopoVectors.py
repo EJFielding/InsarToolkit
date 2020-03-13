@@ -30,6 +30,9 @@ def createParser():
 	parser.add_argument('-v','--verbose', dest='verbose', action='store_true', help='Verbose mode')
 	parser.add_argument('-p','--plot', dest='plot', action='store_true', help='Plot outputs')
 
+	# Options
+	parser.add_argument('--nVectors', dest='nVectors', type=int, default=30, help='Number of vectors to plot if \'plot outputs\' option is selected.')
+
 	return parser
 
 def cmdParser(iargs = None):
@@ -40,7 +43,7 @@ def cmdParser(iargs = None):
 
 ### ANCILLARY FUNCTIONS ---
 ## Plot gradient vectors
-def plotGradientVectors(px,py,mapVals,T,n=10):
+def plotGradientVectors(px,py,mapVals,T,n=30):
 	"""
 		Plot 20x20 vectors based on the pointing vector field
 		INPUTS
@@ -175,11 +178,11 @@ if __name__=='__main__':
 		mapPlot(slope,cmap='viridis',pctmin=1,pctmax=99,background='auto',
 			extent=T.extent,showExtent=True,cbar_orientation='horizontal',title='Slope')
 
-		# Plot Slope
+		# Plot Aspect
 		mapPlot(aspect,cmap='viridis',pctmin=1,pctmax=99,background='auto',
 			extent=T.extent,showExtent=True,cbar_orientation='horizontal',title='Aspect')
 
 		# Plot Vectors
-		plotGradientVectors(px,py,elev,T)
+		plotGradientVectors(px,py,elev,T,n=inpt.nVectors)
 
 		plt.show()

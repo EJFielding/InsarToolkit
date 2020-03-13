@@ -67,6 +67,63 @@ def az2vect(az):
 	return v
 
 
+## 3D vector to azimuth, slope angles
+def vect3d2orient(vx,vy,vz):
+	"""
+		Convert 3D vector components to azimuth and slope
+		INPUTS
+			vx, vy, vz are the 3D vector components
+		OUTPUTS
+			azimuth, slope in degrees
+	"""
+
+	# Compute azimuth angle
+	azimuth=np.arctan2(vy,vx)
+	azimuth=np.rad2deg(azimuth)
+	azimuth=90-azimuth
+
+	# Compute slope angle
+	slope=np.arctan(vz/np.sqrt(vx**2+vy**2))
+	slope=np.rad2deg(slope)
+
+	return azimuth, slope
+
+
+## Azimuth, slope angles to 3D vector
+def orient2vect3d(azimuth,slope):
+	"""
+		Convert azimuth and slope angles in degrees to 3D
+		 vector components
+		INPUTS
+			azimuth in degrees clockwise from north
+			slope in degrees from horizontal
+		OUTPUTS
+			v is the 3D unit vector representation comprising
+			 [vx, vy, vz]
+	"""
+
+	# Convert angles to radians
+	azimuth=90-azimuth
+	azimuth=np.deg2rad(azimuth)
+	slope=np.deg2rad(slope)
+
+	# Compute vertical and horizontal components
+	vz=np.sin(slope)
+	horz=np.cos(slope)
+
+	# Compute azimuth components
+	vx=np.cos(azimuth)*horz
+	vy=np.sin(azimuth)*horz
+
+	# Normalize to unit length
+	vmag=np.sqrt(vx**2+vy**2+vz**2)
+	vx/=vmag
+	vy/=vmag
+	vz/=vmag
+
+	return vx,vy,vz	
+
+
 
 ### CONVERT DEM TO VECTOR FIELD ---
 ## Convert DEM to slope, aspect gradients
