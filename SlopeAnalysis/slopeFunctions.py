@@ -121,7 +121,49 @@ def orient2vect3d(azimuth,slope):
 	vy/=vmag
 	vz/=vmag
 
-	return vx,vy,vz	
+	return vx,vy,vz
+
+
+## Satellite geometry to 3D vector
+def satGeom2vect3d(satAz,satLook):
+	"""
+		Convert satellite geometry (azimuthAngle and look/incidenceAngle)
+		 into 3D vector components. Following the ARIA convention, azimuth
+		 angle simulates the target looking at the satellite, measured in 
+		 degrees from east. Look angle is the angle between vertical and
+		 the satellite look direction. Incidence angle is between the 
+		 normal to the spheroid and the satellite look direction.
+		 This formulation works for both lookAngle and incidenceAngle. 
+	"""
+
+	# Convert angles to radians
+	satAz=np.deg2rad(satAz)
+	satLook=np.deg2rad(satLook)
+
+	# Horizontal components
+	vx=np.cos(satAz)
+	vy=np.sin(satAz)
+
+	# Vertical component
+	vz=np.cos(satLook)
+
+	# Scale horizontal components
+	h=np.sin(satLook)
+	vx*=h
+	vy*=h
+
+	# Flip sign to point from satellite to target
+	vx=-vx
+	vy=-vy
+	vz=-vz
+
+	# Scale to unit length
+	L=np.sqrt(vx**2+vy**2+vz**2)
+	vx/=L
+	vy/=L
+	vz/=L
+
+	return vx,vy,vz
 
 
 

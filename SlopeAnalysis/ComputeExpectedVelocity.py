@@ -7,9 +7,10 @@
 ### IMPORT MODULES ---
 import numpy as np
 import matplotlib.pyplot as plt
+from mpl_toolkits import mplot3d
 from osgeo import gdal
 from geoFormatting import GDALtransform
-from slopeFunctions import orient2vect3d, computeGradients, makePointingVectors
+from slopeFunctions import satGeom2vect3d, computeGradients, makePointingVectors
 from viewingFunctions import mapPlot
 
 
@@ -21,7 +22,7 @@ def createParser():
 	# Input data
 	parser.add_argument('-d','--dem', dest='DEMname', type=str, required=True, help='Name of DEM in Cartesian coordinates.')
 	parser.add_argument('-losAz','--los-azimuth', dest='losAz', type=float, required=True, help='Line of sight azimuth following ARIA convention.')
-	parser.add_argument('-losInc','--los-incidence', dest='losInc', type=float, required=True, help='Line of sight incidence angle following ARIA convention.')
+	parser.add_argument('-losInc','--los-incidence', dest='losInc', type=float, required=True, help='Line of sight incidence angle (from vertical) following ARIA convention.')
 
 	# Outputs
 	parser.add_argument('-o','--outName', dest='outName', type=str, required=True, help='Output name base')
@@ -37,6 +38,17 @@ def cmdParser(iargs = None):
 
 
 ### ANCILLARY FUNCTIONS ---
+## Plot LOS vector in 3D
+def plotLOSvector(Lx,Ly,Lz):
+	Fig=plt.figure()
+	ax=Fig.add_subplot(111,projection='3d')
+	ax.quiver(0,0,0,Lx,Ly,Lz,color='k')
+	ax.plot([-1,1],[0,0],[0,0],'k')
+	ax.plot([0,0],[-1,1],[0,0],'k')
+	ax.set_xlim([-1.1,1.1]); ax.set_ylim([-1.1,1.1]); ax.set_zlim([-1.1,1.1])
+	ax.set_xlabel('--easting--'); ax.set_ylabel('--northing--')
+
+
 ## Save georeferenced map
 def saveMap(templateDS,band,savename):
 	"""
@@ -78,8 +90,18 @@ if __name__=='__main__':
 
 
 	## Convert look angles into LOS vector L
-	Lx,Ly,Lz=orient2vect3d(90-inpt.losAz,inpt.losInc)
-	Lz=-Lz
+	# azimuth measured in degrees CCW from east
+	# incidence angle measured from vertical
+	Lx,Ly,Lz=satGeom2vect3d(inpt.losAz,inpt.losInc)
+
+	# Plot LOS pointing vector if requested
+	if inpt.plot is True:
+		plotLOSvector(Lx,Ly,Lz)
+
+	# Flip direction of LOS vector to point from target to sensor
+	#  This way, toward the satellite is positive
+	Lx=-Lx; Ly=-Ly; Lz=-Lz
+
 
 
 	### PROJECTION ---
@@ -105,7 +127,7 @@ if __name__=='__main__':
 	W=Lx*Dx+Ly*Dy+Lz*Dz
 
 
-	# Save to sensitivity coefficient to data set
+	# Save sensitivity coefficient to data set
 	W=np.nan_to_num(W)
 	sensitivityName='{}_sensitivityCoeff.tif'.format(inpt.outName)
 	saveMap(elevDS,band=W,savename=sensitivityName)
