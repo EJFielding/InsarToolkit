@@ -7,9 +7,9 @@
 """
 
 ### IMPORT MODULES ---
-import numpy as np 
-import matplotlib.pyplot as plt 
-from osgeo import gdal 
+import numpy as np
+import matplotlib.pyplot as plt
+from osgeo import gdal
 from viewingFunctions import imgBackground, mapStats
 
 
@@ -26,8 +26,8 @@ def createParser():
 	# Scaling
 	parser.add_argument('-cs','--centerscale','--center-scale', dest='centerscale', action='store_true', help='Center and scale data set (True/[False])')
 	# Masking
-	parser.add_argument('-m','--mask', dest='maskDS', default=None, help='Georeferenced binary raster, 1 = valid; 0 = invalid')
-	parser.add_argument('-mt','--maskThreshold', dest='maskThreshold', type=float, default=1, help='Threshold value below which the scenes will be masked')
+	parser.add_argument('-m','--maskMaps', dest='maskMaps', default=None, nargs='+', help='Georeferenced binary rasters')
+	parser.add_argument('-mt','--maskThresholds', dest='maskThresholds', type=float, default=[1], nargs='+', help='Threshold values below which masking will be applied. Use one threshold value per masking map. Default = 1.')
 	parser.add_argument('-bg','--background', dest='background', default=None, nargs='+', help='Background value for both maps')
 	parser.add_argument('-bgBase','--bgBase', dest='bgBase', default=None, nargs='+', help='Background value for base image')
 	parser.add_argument('-bgComp','--bgComp', dest='bgComp', default=None, nargs='+', help='Background value for comparison image')
@@ -36,6 +36,8 @@ def createParser():
 	parser.add_argument('-c','--cmap','--colormap', dest='cmap', type=str, default='viridis', help='Colormap')
 	parser.add_argument('-pctmin','--pctmin', dest='pctmin', type=float, default=0, help='Minimum percent clip')
 	parser.add_argument('-pctmax','--pctmax', dest='pctmax', type=float, default=100, help='Maximum percent clip')
+	parser.add_argument('--baseLabel', dest='baseLabel', type=str, default='Base', help='Base data set plot name')
+	parser.add_argument('--compLabel', dest='compLabel', type=str, default='Comparison', help='Comparison data set plot name')
 	# Comparison plot options
 	parser.add_argument('-t','--plotType', dest='plotType', type=str, default='pts', help='Comparison plot type ([default = points], )')
 	parser.add_argument('-s','--skips', dest='skips', type=int, default=1, help='Skip by this value when plotting points')
@@ -73,7 +75,7 @@ def transform2extent(DS):
 
 
 ## Adjust size and resolution of images
-def preFormat(inpt,baseDS,compDS,maskDS=None):
+def preFormat(inpt,baseDS,compDS,maskMaps=None):
 	baseTnsf=baseDS.GetGeoTransform()
 
 	## First adjust base image to desired extent/resolution
@@ -98,15 +100,15 @@ def preFormat(inpt,baseDS,compDS,maskDS=None):
 		outputBounds=inpt.bounds,resampleAlg='bilinear'))
 
 	## Finally, resample mask if specified
-	if maskDS:
-		maskDS=gdal.Warp('',maskDS,options=gdal.WarpOptions(format='MEM',xRes=dx,yRes=dy,
-			outputBounds=inpt.bounds,resampleAlg='near'))
+	if maskMaps is not None:
+		maskMaps=[gdal.Warp('',maskMap,options=gdal.WarpOptions(format='MEM',xRes=dx,yRes=dy,
+			outputBounds=inpt.bounds,resampleAlg='near')) for maskMap in maskMaps]
 
 	## Check that geotransforms are equal
 	baseTnsf=baseDS.GetGeoTransform(); compTnsf=compDS.GetGeoTransform()
 	assert baseTnsf==compTnsf, 'Geo-transforms are not equal!'
 
-	return baseDS, compDS, maskDS
+	return baseDS, compDS, maskMaps
 
 
 ## Masking by value
@@ -166,13 +168,27 @@ def maskByValue(inpt,baseDS,compDS):
 
 
 ## Mask by map
-def maskByMap(inpt,maskDS):
-	# Load data set
-	mask=maskDS.GetRasterBand(1).ReadAsArray()
+def maskByMap(inpt,maskMaps):
+	nMaps=len(maskMaps)
+	nThresholds=len(inpt.maskThresholds)
 
-	# Mask by value threshold
-	mask[mask<inpt.maskThreshold]=0
-	mask[mask>=inpt.maskThreshold]=1
+	# Check there is a threshold value for every mask
+	if nThresholds<nMaps:
+		print('WARNING: Fewer specified masking threshold values than masking maps. Assuming threshold values of 1.')
+
+		# If too few threshold values, fill in with ones
+		for n in range(nMaps-nThresholds): inpt.maskThresholds.append(1)
+
+	# Compound common mask by each map
+	for n in range(nMaps):
+		# Read gdal data set as numpy array
+		mask=maskMaps[n].GetRasterBand(1).ReadAsArray()
+
+		# Mask by threshold value
+		mask[mask<inpt.maskThresholds[n]]=0
+		mask[mask>=inpt.maskThresholds[n]]=1
+
+		inpt.commonMask*=mask
 
 	return mask
 
@@ -200,16 +216,15 @@ def plotDatasets(inpt,baseDS,compDS):
 	caxBase=axBase.imshow(baseImg,
 		vmin=baseStats.vmin,vmax=baseStats.vmax,extent=extent)
 	Fig.colorbar(caxBase,orientation='horizontal')
-	axBase.set_title('Base')
+	axBase.set_title(inpt.baseLabel)
 
 	axComp=Fig.add_subplot(122) # comp figure
 	caxComp=axComp.imshow(compImg,
 		vmin=compStats.vmin,vmax=compStats.vmax,extent=extent)
 	axComp.set_yticks([])
 	Fig.colorbar(caxComp,orientation='horizontal')
-	axComp.set_title('Comparison')
+	axComp.set_title(inpt.compLabel)
 	Fig.tight_layout()
-
 
 
 ## K-means cluster algorithm
@@ -310,7 +325,7 @@ class mapCompare:
 
 
 	## Plot difference
-	def plotDiff(self,pctmin=0,pctmax=100):
+	def plotDiff(self,plotProperties,pctmin=0,pctmax=100):
 		# Formatting
 		vmin,vmax=np.percentile(self.Diff.compressed(),[pctmin,pctmax])
 
@@ -320,7 +335,7 @@ class mapCompare:
 
 		# Plot map
 		cax=ax.imshow(self.Diff,cmap='jet',vmin=vmin,vmax=vmax,extent=self.extent)
-		ax.set_title('Difference (base - comparison)')
+		ax.set_title('Difference ({} - {})'.format(plotProperties['baseLabel'],plotProperties['compLabel']))
 		Fig.colorbar(cax,orientation='horizontal')
 
 		# Save if requested
@@ -379,8 +394,8 @@ class mapCompare:
 
 		# Finalize figure formatting
 		if plotProperties['plotAspect']: self.ax.set_aspect(plotProperties['plotAspect'])
-		self.ax.set_xlabel('base data')
-		self.ax.set_ylabel('comparison data')
+		self.ax.set_xlabel('{} data'.format(plotProperties['baseLabel']))
+		self.ax.set_ylabel('{} data'.format(plotProperties['compLabel']))
 		self.Fig.tight_layout()
 
 		# Save figure
@@ -634,14 +649,15 @@ if __name__=='__main__':
 	compDS=gdal.Open(inpt.compName,gdal.GA_ReadOnly)
 
 	# Load mask if specified
-	if inpt.maskDS:
-		maskDS=gdal.Open(inpt.maskDS,gdal.GA_ReadOnly)
+	if inpt.maskMaps:
+		# Open each mask data set and store as a list
+		maskMapDSs=[gdal.Open(maskMap,gdal.GA_ReadOnly) for maskMap in inpt.maskMaps]
 	else:
-		maskDS=None
+		maskMaps=None
 
 
 	## Pre-format data sets - sample to same map bounds and resolution
-	baseDS,compDS,maskDS=preFormat(inpt,baseDS,compDS,maskDS)
+	baseDS,compDS,maskMaps=preFormat(inpt,baseDS,compDS,maskMapDSs)
 
 
 	## Mask by map and/or values
@@ -649,9 +665,8 @@ if __name__=='__main__':
 	inpt.commonMask=maskByValue(inpt,baseDS,compDS)
 
 	# Mask by map
-	if inpt.maskDS:
-		mask=maskByMap(inpt,maskDS)
-		inpt.commonMask*=mask
+	if inpt.maskMaps:
+		maskByMap(inpt,maskMaps)
 
 
 	## Plot input images
@@ -661,14 +676,15 @@ if __name__=='__main__':
 
 	## Compare two data sets
 	# Format plot properties
-	plotProperties=dict(plotType=inpt.plotType,skips=inpt.skips,plotAspect=inpt.plotAspect,cmap=inpt.cmap,nbins=inpt.nbins)
+	plotProperties=dict(baseLabel=inpt.baseLabel,compLabel=inpt.compLabel,plotType=inpt.plotType,\
+		skips=inpt.skips,plotAspect=inpt.plotAspect,cmap=inpt.cmap,nbins=inpt.nbins)
 
 	# Format analysis properties
 	analysisProperties=dict(analysisType=inpt.analysisType,degree=inpt.degree,kclusters=inpt.kclusters,maxIterations=inpt.maxIterations,nbins=inpt.kbins)
 
 	# Conduct comparison
 	comparison=mapCompare(baseDS,compDS,mask=inpt.commonMask,centerscale=inpt.centerscale,verbose=inpt.verbose,outName=inpt.outName)
-	comparison.plotDiff(pctmin=inpt.pctmin,pctmax=inpt.pctmax)
+	comparison.plotDiff(plotProperties=plotProperties,pctmin=inpt.pctmin,pctmax=inpt.pctmax)
 	comparison.plotComparison(plotProperties=plotProperties,analysisProperties=analysisProperties)
 
 
