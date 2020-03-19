@@ -27,6 +27,7 @@ def createParser():
 	parser.add_argument('-cs','--centerscale','--center-scale', dest='centerscale', action='store_true', help='Center and scale data set (True/[False])')
 	# Masking
 	parser.add_argument('-m','--mask', dest='maskDS', default=None, help='Georeferenced binary raster, 1 = valid; 0 = invalid')
+	parser.add_argument('-mt','--maskThreshold', dest='maskThreshold', type=float, default=1, help='Threshold value below which the scenes will be masked')
 	parser.add_argument('-bg','--background', dest='background', default=None, nargs='+', help='Background value for both maps')
 	parser.add_argument('-bgBase','--bgBase', dest='bgBase', default=None, nargs='+', help='Background value for base image')
 	parser.add_argument('-bgComp','--bgComp', dest='bgComp', default=None, nargs='+', help='Background value for comparison image')
@@ -109,7 +110,7 @@ def preFormat(inpt,baseDS,compDS,maskDS=None):
 
 
 ## Masking by value
-def createMask(inpt,baseDS,compDS):
+def maskByValue(inpt,baseDS,compDS):
 	commonMask=np.ones((baseDS.RasterYSize,baseDS.RasterXSize))
 
 	# Determine if background masking is requested
@@ -162,6 +163,18 @@ def createMask(inpt,baseDS,compDS):
 		for compValue in bgComp: commonMask[compImg==compValue]=0
 
 	return commonMask
+
+
+## Mask by map
+def maskByMap(inpt,maskDS):
+	# Load data set
+	mask=maskDS.GetRasterBand(1).ReadAsArray()
+
+	# Mask by value threshold
+	mask[mask<inpt.maskThreshold]=0
+	mask[mask>=inpt.maskThreshold]=1
+
+	return mask
 
 
 ## Plot image data set
@@ -633,11 +646,11 @@ if __name__=='__main__':
 
 	## Mask by map and/or values
 	# Mask by value(s)
-	inpt.commonMask=createMask(inpt,baseDS,compDS)
+	inpt.commonMask=maskByValue(inpt,baseDS,compDS)
 
 	# Mask by map
 	if inpt.maskDS:
-		mask=maskDS.GetRasterBand(1).ReadAsArray()
+		mask=maskByMap(inpt,maskDS)
 		inpt.commonMask*=mask
 
 
