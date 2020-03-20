@@ -13,7 +13,7 @@ from osgeo import gdal
 from viewingFunctions import imgBackground, mapStats
 
 
-### ARGUMENT PARSER ---
+### PARSER ---
 def createParser():
 	import argparse
 	parser = argparse.ArgumentParser(description='Plot most types of Insar products, including complex images and multiband images')
@@ -227,6 +227,16 @@ def plotDatasets(inpt,baseDS,compDS):
 	Fig.colorbar(caxComp,orientation='horizontal')
 	axComp.set_title(inpt.compLabel)
 	Fig.tight_layout()
+
+	# Save if requested
+	if inpt.outName:
+		savename='{}_side-by-side.png'.format(inpt.outName)
+		Fig.savefig(savename,dpi=600)
+
+		# Report if requested
+		if inpt.verbose is True:
+			print('Saved analysis fig to: {}'.format(savename))
+
 
 
 ## K-means cluster algorithm
@@ -472,10 +482,15 @@ class mapCompare:
 
 		## Plot KDE
 		if plotType in ['kde']:
+			# Plot heat map
 			cax=self.ax.pcolormesh(X,Y,H,cmap=cmap)
 		elif plotType in ['contour']:
+			# Plot contours on top of point measurements
+			skips=plotProperties['skips']
+			self.ax.plot(self.base[::skips],self.comp[::skips],marker='.',color=(0.5,0.5,0.5),linewidth=0,zorder=1)
 			cax=self.ax.contour(X,Y,H,cmap=cmap)
 		elif plotType in ['contourf']:
+			# Plot filled contours
 			cax=self.ax.contourf(X,Y,H,cmap=cmap)
 		self.Fig.colorbar(cax,orientation='horizontal')
 
