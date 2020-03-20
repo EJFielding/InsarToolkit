@@ -86,6 +86,8 @@ def preFormat(inpt,baseDS,compDS,maskMaps=None):
 		dx=baseTnsf[1]; dy=baseTnsf[5]
 		maxX=minX+dx*N; minY=maxY+dy*M
 		inpt.bounds=(minX, minY, maxX, maxY) # (minX, minY, maxX, maxY)
+	else:
+		inpt.bounds=eval(inpt.bounds)
 
 	# Adjust resolution of base image
 	dsFactor=int(2**inpt.dsFactor)
