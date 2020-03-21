@@ -36,7 +36,7 @@ def transform2extent(tnsf,M,N):
 # --- GDAL geographic transform --- 
 # Format transform data into something useful 
 class GDALtransform:
-	def __init__(self,DS=None,transform=None,shape=None,vocal=False):
+	def __init__(self,DS=None,transform=None,shape=None,verbose=False):
 		from osgeo import gdal
 		# transform comes from data.GetGeoTransform() 
 		# shape comes from data.GetRasterBand(#).ReadAsArray().shape 
@@ -59,7 +59,7 @@ class GDALtransform:
 		self.extent=[self.xmin,self.xmax,self.ymin,self.ymax] 
 		self.bounds=[self.xmin,self.ymin,self.xmax,self.ymax] 
 		# Print outputs? 
-		if vocal is not False: 
+		if verbose is not False: 
 			print('Image properties: ')
 			print('\tNS-dim (m): %i' % self.m) 
 			print('\tEW-dim (n): %i' % self.n) 
