@@ -1,108 +1,330 @@
 #!/usr/bin/env python3
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Basic, general mathematical functions
-# 
-# By Rob Zinke 2019 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+"""
+	Provide a list of interferograms to compute the timeseries using
+	 the short baseline subset (SBAS) approach, with or without 
+	 regularization.
+"""
 
-# Import modules 
-import numpy as np 
-from dateFormatting import udatesFromPairs, daysBetween
+### IMPORT MODULES ---
+import numpy as np
+import matplotlib.pyplot as plt
+from datetime import datetime
+from osgeo import gdal
+from viewingFunctions import mapPlot, imagettes
 
-### --- Incidence matrix ---
-def incidenceMatrix(timePairs,epochs,masterPos=0,slavePos=1,verbose=False):
-	## Setup
 
-	mObs=len(timePairs)
-	nEpochs=len(epochs)
+### PARSER ---
+def createParser():
+	import argparse
+	parser = argparse.ArgumentParser(description='Compute the SBAS timeseries.')
+	# Data sets
+	parser.add_argument('-f','--files', dest='files', type=str, required=True, help='Files to be analyzed')
+	parser.add_argument('-no-reg','--no-regularization', dest='regularization', action='store_false', help='Regularization ([True]/False)')
 
-	## Incidence values
-	A=np.zeros((mObs,nEpochs)) # empty incidence matrix
-
-	# Loop through each interferogram
-	for i in range(mObs):
-		pair=timePairs[i] 
-		master=pair[masterPos]
-		slave=pair[slavePos]
-
-		# Master date
-		try:
-			A[i,epochs==master]=-1
-		except:
-			pass
-		# Slave date
-		try:
-			A[i,epochs==slave]=+1
-		except:
-			pass
-
-	return A
-
-### --- SBAS --- 
-def SBASrz(dataStack,datePairs,refDate='firstDate',dateFmt="%Y%m%d",verbose=False):
-	## Setup parameters
-	nIFGs=dataStack.shape[0] # nb interferograms = first dimension of data stack
-	M=dataStack.shape[1] # NS map dimension
-	N=dataStack.shape[2] # EW map dimension
-
-	# Specify convention
-	masterPos=0
-	slavePos=1
-
-	# Pairs
-	mObs=len(datePairs)
-	assert mObs==nIFGs, 'Number of date pairs and interferograms must be same'
-
-	# Find unique dates and place in order
-	uniqueDates=udatesFromPairs(datePairs)
-	uniqueDates.sort()
-
-	# Determine reference date
-	if refDate=='firstDate':
-		refDate=uniqueDates[0]
-	else:
-		print('Changing refDate does not work for now!'); exit()
-
-	# Determine epochs in decimal years for columns of matrix
-	if dateFmt in ['decimal']:
-		epochs=[uDate-refDate for uDate in uniqueDates]
-	else:
-		epochs=[daysBetween(uDate,refDate,fmt=dateFmt)/365.25 for uDate in uniqueDates] # time since reference date
-	epochs.remove(refDate) # remove reference date from list 
-	nEpochs=len(epochs)
-
-	# Convert date pairs into time pairs
-	if dateFmt in ['decimal']:
-		timePairs=[[pair[0]-refDate,pair[1]-refDate] for pair in datePairs]
-	else:
-		timePairs=[[daysBetween(pair[0],refDate,fmt=dateFmt)/365.25,daysBetween(pair[1],refDate,fmt=dateFmt)/365.25] \
-			for pair in datePairs]
-
-	# Report setup if requested
-	if verbose is True:
-		print('Nb pairs: {}'.format(mObs))
-		print('Nb unique dates (incl ref date): {}'.format(len(uniqueDates)))
-		print('Reference date: {}'.format(refDate))
-		print('Nb epochs (excl ref date): {}'.format(nEpochs))
-		print('Constructing incidence matrix')
-
-	## Solve for time series
-	PhiHat=np.zeros((nEpochs,M,N))
-
-	# Work pixel-by-pixel
-	for m in range(M):
-		for n in range(N):
-			if verbose is True:
-				print('Pixel (m n):',m,n)
-			# Construct incidence matrix
-			A=incidenceMatrix(timePairs,epochs,verbose=verbose)
-
-			# Invert incidence matrix
-			Ainv=np.linalg.inv(np.dot(A.T,A))
-
-			# Reconstruct displacements
-			PhiHat[:,m,n]=Ainv.dot(A.T).dot(dataStack[:,m,n])
+	# Reference point
+	parser.add_argument('-refLaLo', dest='refLaLo', type=float, nargs=2, help='Reference lat/lon, e.g., 37.5 90.0')
+	parser.add_argument('-refYX', dest='refYX', type=int, nargs=2, help='Reference Y/X, e.g., 45 119')
+	parser.add_argument('--no-ref', dest='noRef', action='store_true', help='Do not use a reference point. Must be explicit.')
 
 	# Outputs
-	uniqueDates.remove(refDate) # return list of dates
-	return uniqueDates,PhiHat
+	parser.add_argument('-v','--verbose', dest='verbose', action='store_true', help='Verbose mode')
+	parser.add_argument('--plot-inputs', dest='plotInputs', action='store_true', help='Plot input interferograms')
+
+	parser.add_argument('-o','--outName', dest='outName', type=str, default=None, help='Output name, for difference map and analysis plots')
+
+	return parser
+
+def cmdParser(iargs = None):
+	parser = createParser()
+	return parser.parse_args(args=iargs)
+
+
+
+### LOAD DATA ---
+## Load data from geotiff files
+def loadARIAdata(inpt):
+	from glob import glob
+	from geoFormatting import GDALtransform
+
+	# Detect file names
+	inpt.fnames=glob(inpt.files)
+
+	# Empty lists
+	stack=[] # data cube
+	inpt.pairNames=[] # pair names
+	inpt.pairs=[] # pairs as lists
+
+	# Loop through files to load data
+	for fname in inpt.fnames:
+		# Print filename if requested
+		if inpt.verbose is True:
+			print('Loading: {}'.format(fname))
+
+		# Add pair name to list
+		pairName=fname.split('.')[0]
+		inpt.pairNames.append(pairName)
+		inpt.pairs.append(pairName.split('_'))
+
+		# Load gdal data set
+		DS=gdal.Open(fname,gdal.GA_ReadOnly)
+		img=DS.GetRasterBand(1).ReadAsArray()
+
+		# Add image to stack
+		stack.append(img)
+
+	# Grab spatial parameters from final map data set
+	inpt.R=DS.RasterYSize; inpt.S=DS.RasterXSize
+	inpt.Proj=DS.GetProjection()
+	inpt.Tnsf=DS.GetGeoTransform()
+	inpt.T=GDALtransform(DS)
+	del DS
+
+	# Convert stack to 3D array
+	stack=np.array(stack)
+
+	return stack
+
+
+
+### REFERENCE POINT ---
+## Format and apply reference point
+def refPoint(inpt,stack):
+	# Check that a refernce point is provided, or no-ref is specified
+	if inpt.noRef is True:
+		print('No reference point specified')
+	else:
+		assert inpt.refLaLo is not None or inpt.refYX is not None, 'Reference point must be specified'
+
+	# If reference point is given in lat lon, find equivalent pixels
+	if inpt.refLaLo is not None:
+		pass
+
+
+	return stack
+
+
+
+### SBAS COMPUTATION ---
+## SBAS
+class SBAS:
+	def __init__(self,inpt,stack):
+		# List of epochs to solve for
+		self.epochList(inpt)
+
+		# Design matrix
+		self.constructIncidenceMatrix(inpt)
+		if inpt.regularization is True: self.regularizeMatrix()
+
+		# Solve for displacements
+		self.constructDisplacements(inpt,stack)
+
+
+	# Epochs
+	def epochList(self,inpt):
+		# Number of interferograms
+		self.M=len(inpt.pairs)
+
+		# List of all dates, including redundant
+		allDates=[]
+		[allDates.extend(pair) for pair in inpt.pairs]
+
+		# List of unique dates
+		self.dates=[]
+		[self.dates.append(date) for date in allDates if date not in self.dates]
+		self.dates.sort() # sort oldest to youngest
+		self.N=len(self.dates)
+
+		# Reference date
+		self.referenceDate=self.dates[0]
+
+		# Epochs to solve for
+		self.epochs=[datetime.strptime(date,'%Y%m%d') for date in self.dates]
+
+		# Times since reference date
+		self.times=[(epoch-self.epochs[0]).days/365.2422 for epoch in self.epochs]
+
+		# Report if requested
+		if inpt.verbose is True:
+			print(self.dates)
+			print('{} dates'.format(len(self.dates)))
+			print('Reference date: {}'.format(self.referenceDate))
+
+
+	# Incidence matrix
+	def constructIncidenceMatrix(self,inpt):
+		"""
+			The incidence matrix A is an M x (N-1) matrix in which
+			 the master date is represented by +1, and the slave
+			 date is -1 if it is not the reference date.
+		"""
+
+		# Empty matrix of all zeros
+		self.A=np.zeros((self.M,self.N-1))
+
+		# Loop through pairs
+		for i,pair in enumerate(inpt.pairs):
+			masterDate=pair[0]
+			slaveDate=pair[1]
+
+			# Master date
+			masterNdx=self.dates.index(masterDate) # index within date list
+			self.A[i,masterNdx-1]=1 # Index-1 to ignore reference date
+
+			# Slave date
+			if slaveDate!=self.referenceDate:
+				slaveNdx=self.dates.index(slaveDate) # index within date list
+				self.A[i,slaveNdx-1]=-1 # Index-1 to ignore reference date
+
+
+	# Regularization functions
+	def regularizeMatrix(self):
+		"""
+			Regularization based on the linear model phs - v(tj-t1) - c = 0
+		"""
+
+		# Expand A matrix
+		self.A=np.concatenate([self.A,np.zeros((self.M,2))],axis=1)
+		self.A=np.concatenate([self.A,np.zeros((self.N-1,self.N-1+2))],axis=0)
+		for i in range(self.N-1):
+			self.A[self.M+i,i]=1
+			self.A[self.M+i,-2]=-(self.epochs[i+1]-self.epochs[0]).days/365.2422
+			self.A[self.M+i,-1]=-1
+
+
+	# Solve for displacements
+	def constructDisplacements(self,inpt,stack):
+		## Setup
+		# Invert design matrix
+		Ainv=np.linalg.inv(np.dot(self.A.T,self.A)).dot(self.A.T)
+
+		# Empty maps of solution values
+		self.PHS=np.zeros((self.N,inpt.R,inpt.S)) # empty phase cube
+		self.V=np.zeros((inpt.R,inpt.S))
+		self.C=np.zeros((inpt.R,inpt.S))
+
+
+		## Fast method - solve for all pixels at once
+		if inpt.regularization is False:
+			# Reshape data into M x (nb pixels) array
+			stack=stack.reshape(self.M,inpt.R*inpt.S)
+
+			# Solve for phase through time
+			PHS=Ainv.dot(stack)
+			PHS=np.concatenate([np.zeros((1,inpt.R,inpt.S)),PHS.reshape(self.N-1,inpt.R,inpt.S)],axis=0)
+			self.PHS=PHS
+
+			# Solve for linear velocity and constant using polyfit
+			for i in range(inpt.R):
+				for j in range(inpt.S):
+					fit=np.polyfit(self.times,self.PHS[:,i,j],1)
+
+					self.V[i,j]=fit[0]
+					self.C[i,j]=fit[1]
+
+
+		## Slow method - pixel-by-pixel
+		elif inpt.regularization is True:
+			# Simulatenously solve for phase and velocity on a 
+			#  pixel-by-pixel basis
+			for i in range(inpt.R):
+				for j in range(inpt.S):
+					# Interferogram values of pixel
+					series=stack[:,i,j]
+					series=series.reshape(self.M,1)
+
+					# Add zeros for regularization
+					series=np.concatenate([series,np.zeros((self.N-1,1))],axis=0)
+
+					# Solve for solution
+					sln=Ainv.dot(series)
+
+					# Add results to arrays
+					self.PHS[1:,i,j]=sln[:-2].flatten()
+					self.V[i,j]=sln[-2]
+					self.C[i,j]=sln[-1]
+
+
+	## Plot results
+	def plotResults(self):
+		## Plot velocity map
+		velFig,velAx=mapPlot(self.V,cmap='viridis',pctmin=0,pctmax=100,background=None,
+			extent=None,showExtent=False,cbar_orientation='horizontal',title='LOS velocity')
+
+		return velFig, velAx
+
+
+### PHASE ANALYSIS ---
+def phaseAnalysis(event):
+	print('Phase analysis')
+
+	# Location
+	px=event.xdata; py=event.ydata
+	px=int(round(px)); py=int(round(py))
+
+	# Report position and cumulative values
+	print('px {} py {}'.format(px,py)) # report position
+	print('long-term velocity {}'.format(S.V[py,px]))
+
+	# Extract phase values
+	phsValues=S.PHS[:,py,px]
+	print('Phase values: {}'.format(phsValues))
+	velocityFit=np.poly1d([S.V[py,px],S.C[py,px]])
+	resids=phsValues-velocityFit(S.times)
+	print('RMS {}'.format(np.sqrt(np.mean(resids**2))))
+
+	# Plot phase over time
+	phsAx.cla()
+	phsAx.plot(S.epochs,velocityFit(S.times),'g',label='linear fit')
+	phsAx.plot(S.epochs,phsValues,'k.',label='reconstructed phase')
+	phsAx.set_xticks(S.epochs)
+	labels=[datetime.strftime(epoch,'%Y%m%d') for epoch in S.epochs]
+	phsAx.set_xticklabels(labels,rotation=80)
+	phsFig.tight_layout()
+
+
+	# Draw
+	phsFig.canvas.draw()
+
+
+
+### MAIN ---
+if __name__=='__main__':
+	# Gather inputs
+	inpt=cmdParser()
+
+
+	## Load data
+	stack=loadARIAdata(inpt)
+
+	# Plot data if requested
+	if inpt.plotInputs:
+		imagettes(stack,3,4,cmap='viridis',downsampleFactor=0,pctmin=0,pctmax=100,
+			colorbarOrientation='horizontal',background=None,
+			extent=inpt.T.extent,showExtent=False,titleList=inpt.pairNames,supTitle='Inputs')
+
+
+	## Refereence point
+	stack=refPoint(inpt,stack)
+
+
+	## SBAS
+	# Compute SBAS
+	S=SBAS(inpt,stack)
+
+	# Plot displacement timeseries
+	velFig,velAx=S.plotResults()
+
+
+	## Analyze displacement timeseries
+	# Plot phase over time
+	phsFig=plt.figure(figsize=(7,6))
+	phsAx=phsFig.add_subplot(111)
+	phsAx.set_title('Phase over time')
+	phsAx.set_xlabel('time'); phsAx.set_ylabel('phase')
+
+	# Interact with velocity figure
+	velFig.canvas.mpl_connect('button_press_event',phaseAnalysis)
+
+
+
+	plt.show()
