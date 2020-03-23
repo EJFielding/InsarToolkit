@@ -26,6 +26,11 @@ def createParser():
 	parser.add_argument('-refYX', dest='refYX', type=int, nargs=2, help='Reference Y/X, e.g., 45 119')
 	parser.add_argument('--no-ref', dest='noRef', action='store_true', help='Do not use a reference point. Must be explicit.')
 
+	# Plotting specs
+	parser.add_argument('-pctmin', dest='pctmin', type=float, default=0, help='Min percent clip')
+	parser.add_argument('-pctmax', dest='pctmax', type=float, default=100, help='Max percent clip')
+	parser.add_argument('-bg','--background', dest='background', default=None, help='Background value')
+
 	# Outputs
 	parser.add_argument('-v','--verbose', dest='verbose', action='store_true', help='Verbose mode')
 	parser.add_argument('--plot-inputs', dest='plotInputs', action='store_true', help='Plot input interferograms')
@@ -62,6 +67,7 @@ def loadARIAdata(inpt):
 
 		# Add pair name to list
 		pairName=fname.split('.')[0]
+		pairName=pairName[:17]
 		inpt.pairNames.append(pairName)
 		inpt.pairs.append(pairName.split('_'))
 
@@ -247,8 +253,8 @@ class SBAS:
 	## Plot results
 	def plotResults(self):
 		## Plot velocity map
-		velFig,velAx=mapPlot(self.V,cmap='viridis',pctmin=0,pctmax=100,background=None,
-			extent=None,showExtent=False,cbar_orientation='horizontal',title='LOS velocity')
+		velFig,velAx=mapPlot(self.V,cmap='viridis',pctmin=inpt.pctmin,pctmax=inpt.pctmax,background=inpt.background,
+			extent=inpt.T.extent,showExtent=True,cbar_orientation='horizontal',title='LOS velocity')
 
 		return velFig, velAx
 
@@ -298,8 +304,8 @@ if __name__=='__main__':
 
 	# Plot data if requested
 	if inpt.plotInputs:
-		imagettes(stack,3,4,cmap='viridis',downsampleFactor=0,pctmin=0,pctmax=100,
-			colorbarOrientation='horizontal',background=None,
+		imagettes(stack,3,4,cmap='viridis',pctmin=inpt.pctmin,pctmax=inpt.pctmax,
+			colorbarOrientation='horizontal',background=inpt.background,
 			extent=inpt.T.extent,showExtent=False,titleList=inpt.pairNames,supTitle='Inputs')
 
 
