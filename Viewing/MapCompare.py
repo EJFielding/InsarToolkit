@@ -16,7 +16,7 @@ from viewingFunctions import imgBackground, mapStats
 ### PARSER ---
 def createParser():
 	import argparse
-	parser = argparse.ArgumentParser(description='Plot most types of Insar products, including complex images and multiband images')
+	parser = argparse.ArgumentParser(description='Plot and regress the second map relative to the first.')
 	# Data sets
 	parser.add_argument(dest='baseName', type=str, help='Map to serve as base (independent) data set')
 	parser.add_argument(dest='compName', type=str, help='Map to serve as comparison (dependent) to the base')
@@ -670,7 +670,7 @@ if __name__=='__main__':
 		# Open each mask data set and store as a list
 		maskMapDSs=[gdal.Open(maskMap,gdal.GA_ReadOnly) for maskMap in inpt.maskMaps]
 	else:
-		maskMaps=None
+		maskMapDSs=None
 
 
 	## Pre-format data sets - sample to same map bounds and resolution

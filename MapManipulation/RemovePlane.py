@@ -18,7 +18,8 @@ def createParser():
 	# Data sets
 	parser.add_argument(dest='mapName', type=str, help='Map data set from which to remove plane')
 	parser.add_argument('-bg','--background', dest='background', default=None, help='Background value')
-	parser.add_argument('-ds','--downsample-factor', dest='downsampleFactor', type=int, default=2, help='Power of 2 by which to downsample the data set (default is 2; e.g., ds 2 is 2^2=4)')
+	parser.add_argument('-pctmin','--pctmin', dest='pctmin', type=float, default=0, help='Minimum percent clip')
+	parser.add_argument('-pctmax','--pctmax', dest='pctmax', type=float, default=100, help='Maximum percent clip')
 
 	# Outputs
 	parser.add_argument('-v','--verbose', dest='verbose', action='store_true', help='Verbose mode')
@@ -158,7 +159,7 @@ if __name__=='__main__':
 			print('Background value: {}'.format(inpt.background))
 
 	# Plot original image
-	Fig,ax=mapPlot(img,cmap='viridis',pctmin=0,pctmax=100,background=None,
+	Fig,ax=mapPlot(img,cmap='viridis',pctmin=inpt.pctmin,pctmax=inpt.pctmax,background=None,
 		extent=inpt.T.extent,showExtent=True,cbar_orientation='horizontal',
 		title='Original map')
 	ax.set_xlabel('easting'); ax.set_ylabel('northing')
@@ -172,7 +173,7 @@ if __name__=='__main__':
 	dtrImg=img-P
 
 	# Plot plane removed
-	mapPlot(dtrImg,cmap='viridis',pctmin=0,pctmax=100,background=None,
+	mapPlot(dtrImg,cmap='viridis',pctmin=inpt.pctmin,pctmax=inpt.pctmax,background=None,
 		extent=inpt.T.extent,showExtent=True,cbar_orientation='horizontal',
 		title='Plane removed')
 
