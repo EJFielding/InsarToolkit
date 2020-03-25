@@ -45,6 +45,14 @@ def cmdParser(iargs = None):
 
 
 
+### OBJECTS ---
+## Object for passing parameters
+class TSparams:
+	def __init__(self):
+		pass
+
+
+
 ### LOAD DATA ---
 ## Load data from geotiff files
 def loadARIAdata(inpt):
@@ -101,10 +109,31 @@ def refPoint(inpt,stack):
 	else:
 		assert inpt.refLaLo is not None or inpt.refYX is not None, 'Reference point must be specified'
 
-	# If reference point is given in lat lon, find equivalent pixels
-	if inpt.refLaLo is not None:
-		pass
 
+		## Find reference
+		# If reference point is given in lat lon, find equivalent pixels
+		if inpt.refLaLo is not None:
+			# Y pixel
+			deltaLat=(inpt.refLaLo[0]-inpt.T.ystart)
+			yref=int(0+deltaLat/inpt.T.ystep)
+			# X pixel
+			deltaLon=(inpt.refLaLo[1]-inpt.T.xstart)
+			xref=int(0+deltaLon/inpt.T.xstep)
+			# Ref La Lo
+			inpt.refYX=[yref,xref]
+
+		# If reference point is given in pixels, find equivalent lat lon
+		if inpt.refLaLo is None:
+			# Lat
+			refLat=inpt.T.ystart+inpt.T.ystep*inpt.refYX[0]
+			# Lon
+			refLon=inpt.T.xstart+inpt.T.xstep*inpt.refYX[1]
+			# Ref Y X
+			inpt.refLaLo=[refLat,refLon]
+
+		# Remove reference value from each map
+		for k in range(stack.shape[0]):
+			stack[k,:,:]=stack[k,:,:]-stack[k,inpt.refYX[0],inpt.refYX[1]]
 
 	return stack
 
@@ -114,6 +143,13 @@ def refPoint(inpt,stack):
 ## SBAS
 class SBAS:
 	def __init__(self,inpt,stack):
+		# Parameters
+		if inpt.noRef is False:
+			self.refY=inpt.refYX[0]
+			self.refX=inpt.refYX[1]
+			self.refLat=inpt.refLaLo[0]
+			self.refLon=inpt.refLaLo[1]
+
 		# List of epochs to solve for
 		self.epochList(inpt)
 
@@ -254,7 +290,9 @@ class SBAS:
 	def plotResults(self):
 		## Plot velocity map
 		velFig,velAx=mapPlot(self.V,cmap='viridis',pctmin=inpt.pctmin,pctmax=inpt.pctmax,background=inpt.background,
-			extent=inpt.T.extent,showExtent=True,cbar_orientation='horizontal',title='LOS velocity')
+			extent=None,showExtent=False,cbar_orientation='horizontal',title='LOS velocity')
+		# Plot reference point
+		if inpt.noRef is False: velAx.plot(self.refX,self.refY,'ks')
 
 		return velFig, velAx
 
