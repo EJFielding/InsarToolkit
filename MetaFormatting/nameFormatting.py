@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, time
 
 # --- Sentinel SLC name parser --- 
@@ -5,8 +6,8 @@ from datetime import datetime, time
 #	Key: https://sentinel.esa.int/web/sentinel/user-guides/sentinel-1-sar/naming-conventions 
 class SentinelName:
 	def __init__(self,fpath): 
-		self.name=fpath.split('/')[-1] 
-	def parse(self): 
+		self.name=os.path.basename(fpath) 
+	def parse(self):
 		fname=self.name.replace('__','_') 
 		name_parts=fname.split('_') 
 		self.mission=name_parts[0] # satellite platform, e.g., S1B
@@ -16,7 +17,7 @@ class SentinelName:
 		self.proc_lvl=self.misc[0] # processing level, e.g., 1, 2
 		self.prod_class=self.misc[1] # product class 
 		self.polarization=self.misc[2:] # polarization 
-		# Times of Acquisition 
+		# Times of Acquisition
 		self.AcqStart=name_parts[4] # full date of acquisition 
 		self.AcqDateStart=self.AcqStart.split('T')[0] 
 		self.AcqYearStart=self.AcqStart[0:4] 
@@ -46,7 +47,7 @@ class SentinelName:
 #	Key: https://aria.jpl.nasa.gov/node/97 
 class ARIAname: 
 	def __init__(self,name): 
-		self.name=name.strip('.nc') 
+		self.name=os.path.basename(name).strip('.nc') 
 		# Split into parts 
 		parts=self.name.split('-')  
 		self.sensor=parts[0]   # sensor name 
@@ -55,20 +56,20 @@ class ARIAname:
 		self.look=parts[3]     # sat. look direction 
 		self.track=parts[4]    # track number 
 		self.mode=parts[5]     # acquisition mode 
-		self.date=parts[6]     # acquisition date  
+		self.pair=parts[6]     # acquisition date  
 		self.time=parts[7]     # acquisition time 
 		self.coords=parts[8]   # acquisition coords 
 		self.orbits=parts[9]   # orbit parameters 
 		self.SysTag=parts[10]  # system tag 
 		self.VersTag=parts[11] # version tag 
 		# Date formatting 
-		dates=self.date.split('_') 
-		RefDate=dates[0] # reference date 
+		self.dates=self.pair.split('_') 
+		RefDate=self.dates[0] # reference date 
 		self.RefDate=RefDate # full date 
 		self.RefYear=int(RefDate[:4]) # YYYY 
 		self.RefMo=int(RefDate[4:6])  # MM 
 		self.RefDay=int(RefDate[6:8]) # DD 
-		SecDate=dates[1] # secondary date 
+		SecDate=self.dates[1] # secondary date 
 		self.SecDate=SecDate # full date 
 		self.SecYear=int(SecDate[:4]) # YYYY 
 		self.SecMo=int(SecDate[4:6])  # MM 

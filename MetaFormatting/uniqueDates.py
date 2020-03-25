@@ -19,7 +19,7 @@ def createParser():
 	parser.add_argument('-l','--list', dest='nameList', type=str, default=None, help='Directly specify list of pairs.')
 	# Outputs
 	parser.add_argument('-v','--verbose', dest='verbose', action='store_true', help='Verbose mode.')
-	parser.add_argument('-o','--output', dest='outputList', type=str, default=None, help='Filename to write all unique dates.')
+	parser.add_argument('-o','--outname', dest='outName', type=str, default=None, help='Filename to write all unique dates.')
 	return parser 
 
 def cmdParser(inpt_args=None):
@@ -111,5 +111,10 @@ if __name__=="__main__":
 
 
 	## Save if requested
+	if inpt.outName:
+		if inpt.outName[-4:]!='.txt': inpt.outName+='.txt'
+		with open(inpt.outName,'w') as outFile:
+			[outFile.write('{}\n'.format(date)) for date in dates]
+			outFile.close()
 
-	print('Finish this script')
+		if inpt.verbose is True: print('Saved to: {}'.format(inpt.outName))
