@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 	Provide a list of interferograms to compute the timeseries using
-	 the short baseline subset (SBAS) approach, with or without 
+	 the short baseline subset (SBAS) approach, with or without
 	 regularization.
 """
 
@@ -143,7 +143,10 @@ def refPoint(inpt,stack):
 ## SBAS
 class SBAS:
 	def __init__(self,inpt,stack):
-		# Parameters
+		# Basic parameters
+		self.verbose=inpt.verbose
+
+		# Spatial parameters
 		if inpt.noRef is False:
 			self.refY=inpt.refYX[0]
 			self.refX=inpt.refYX[1]
@@ -186,7 +189,7 @@ class SBAS:
 		self.times=[(epoch-self.epochs[0]).days/365.2422 for epoch in self.epochs]
 
 		# Report if requested
-		if inpt.verbose is True:
+		if self.verbose==True:
 			print(self.dates)
 			print('{} dates'.format(len(self.dates)))
 			print('Reference date: {}'.format(self.referenceDate))
@@ -232,6 +235,9 @@ class SBAS:
 			self.A[self.M+i,-2]=-(self.epochs[i+1]-self.epochs[0]).days/365.2422
 			self.A[self.M+i,-1]=-1
 
+		# Report if requested
+		if self.verbose==True: print('Enforcing regularization')
+
 
 	# Solve for displacements
 	def constructDisplacements(self,inpt,stack):
@@ -245,28 +251,26 @@ class SBAS:
 		self.C=np.zeros((inpt.R,inpt.S))
 
 
-		## Fast method - solve for all pixels at once
-		if inpt.regularization is False:
-			# Reshape data into M x (nb pixels) array
-			stack=stack.reshape(self.M,inpt.R*inpt.S)
-
-			# Solve for phase through time
-			PHS=Ainv.dot(stack)
-			PHS=np.concatenate([np.zeros((1,inpt.R,inpt.S)),PHS.reshape(self.N-1,inpt.R,inpt.S)],axis=0)
-			self.PHS=PHS
-
-			# Solve for linear velocity and constant using polyfit
+		## Without regularization, use a linear fit to the data
+		if inpt.regularization==False:
 			for i in range(inpt.R):
 				for j in range(inpt.S):
-					fit=np.polyfit(self.times,self.PHS[:,i,j],1)
+					# Interferogram values of pixel
+					series=stack[:,i,j]
+					series=series.reshape(self.M,1)
 
+					# Solve for displacements
+					self.PHS[1:,i,j]=Ainv.dot(series).flatten()
+
+					# Solve for linear velocity and constant using polyfit
+					fit=np.polyfit(self.times,self.PHS[:,i,j],1)
 					self.V[i,j]=fit[0]
 					self.C[i,j]=fit[1]
 
 
 		## Slow method - pixel-by-pixel
-		elif inpt.regularization is True:
-			# Simulatenously solve for phase and velocity on a 
+		elif inpt.regularization==True:
+			# Simulatenously solve for phase and velocity on a
 			#  pixel-by-pixel basis
 			for i in range(inpt.R):
 				for j in range(inpt.S):
@@ -277,7 +281,7 @@ class SBAS:
 					# Add zeros for regularization
 					series=np.concatenate([series,np.zeros((self.N-1,1))],axis=0)
 
-					# Solve for solution
+					# Solve for dipslacement, velocity, and constant
 					sln=Ainv.dot(series)
 
 					# Add results to arrays
