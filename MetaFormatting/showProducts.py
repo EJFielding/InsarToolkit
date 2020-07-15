@@ -4,7 +4,7 @@
 import os
 import argparse
 from glob import glob
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
 import matplotlib.pyplot as plt
 from pandas.plotting import register_matplotlib_converters
@@ -79,6 +79,8 @@ def plotAcquisitions(ariaNames):
     dateList = list(set(dateList))
     dateList.sort()
     dateLabels = [date.strftime('%Y-%m-%d') for date in dateList]
+    xlims = [dateList[0]-timedelta(days=1),
+                dateList[-1]+timedelta(days=1)]
 
     # Establish figure
     Fig = plt.figure()
@@ -87,18 +89,20 @@ def plotAcquisitions(ariaNames):
 
     # Plot frame centers
     for frame in frames:
-        axMaster.plot(frame.masterDate,frame.center,'ko')
-        axSlave.plot(frame.slaveDate,frame.center,'ko')
+        axMaster.scatter(frame.masterDate,frame.center,c='k')
+        axSlave.scatter(frame.slaveDate,frame.center,c='k')
 
     # Finish plot
     axMaster.set_ylabel('Latitude')
     axMaster.set_xticks(dateList)
     axMaster.set_xticklabels([])
+    axMaster.set_xlim(xlims)
 
     axSlave.set_ylabel('Latitude')
     axSlave.set_xlabel('Date')
     axSlave.set_xticks(dateList)
     axSlave.set_xticklabels(dateLabels,rotation=80)
+    axSlave.set_xlim(xlims)
 
     Fig.tight_layout()
 
