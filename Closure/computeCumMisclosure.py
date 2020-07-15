@@ -749,6 +749,8 @@ if __name__=='__main__':
 	## Calculate misclosure
 	calcMisclosure(inpt,data)
 
+	np.savez('CCM',cumMisclosure=data.cumMisclosure,cumAbsMisclosure=data.cumAbsMisclosure)
+
 	# Plot misclosure
 	cumMiscMap,cumAbsMiscMap=plotMisclosure(inpt,data)
 
