@@ -6,6 +6,7 @@
 """
 
 ### IMPORT MODULES ---
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
@@ -74,7 +75,7 @@ def loadARIAdata(inpt):
 			print('Loading: {}'.format(fname))
 
 		# Add pair name to list
-		pairName=fname.split('.')[0]
+		pairName=os.path.basename(fname).split('.')[0]
 		pairName=pairName[:17]
 		inpt.pairNames.append(pairName)
 		inpt.pairs.append(pairName.split('_'))
@@ -293,7 +294,7 @@ class SBAS:
 	## Plot results
 	def plotResults(self):
 		## Plot velocity map
-		velFig,velAx=mapPlot(self.V,cmap='viridis',pctmin=inpt.pctmin,pctmax=inpt.pctmax,background=inpt.background,
+		velFig,velAx=mapPlot(self.V,cmap='jet',pctmin=inpt.pctmin,pctmax=inpt.pctmax,background=inpt.background,
 			extent=None,showExtent=False,cbar_orientation='horizontal',title='LOS velocity')
 		# Plot reference point
 		if inpt.noRef is False: velAx.plot(self.refX,self.refY,'ks')
