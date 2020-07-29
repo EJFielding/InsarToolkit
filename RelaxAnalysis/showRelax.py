@@ -250,7 +250,7 @@ class displacementDataset:
         m = n = int(np.ceil(np.sqrt(self.Nepochs)))
 
         # Build figure
-        Fig = plt.figure(figsize=(20,10))
+        Fig = plt.figure()
         for i in range(self.Nepochs):
             # Create axis
             ax = Fig.add_subplot(m,n,i+1)
@@ -285,9 +285,6 @@ if __name__ == '__main__':
     DS = displacementDataset(DSname,eastFiles,northFiles,upFiles,
         dataType=inps.dspType,verbose=inps.verbose)
 
-    # Plot data
-    DS.plotDisplacements(cmap=inps.cmap,limits=inps.limits,palette=inps.palette,
-        steps=inps.steps,vscale=inps.vscale)
 
     # Project into LOS if requested
     if inps.LOS == True:
@@ -296,6 +293,10 @@ if __name__ == '__main__':
 
         # Plot LOS
         DS.plotLOS(cmap=inps.cmap,limits=inps.limits,palette=inps.palette)
+    else:
+        # Plot data
+        DS.plotDisplacements(cmap=inps.cmap,limits=inps.limits,palette=inps.palette,
+            steps=inps.steps,vscale=inps.vscale)
 
 
     plt.show()
