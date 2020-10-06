@@ -60,6 +60,10 @@ images and multi-band data sets.'''
         help='Plot histogram (background ignored)')
     outputArgs.add_argument('-o','--outName', dest='outName', type=str, default=None,
         help='Output name')
+    outputArgs.add_argument('-of','--output-format', dest='outFmt', type=str, default='png',
+        help='Output format ([png],pdf)')
+    outputArgs.add_argument('--nodisplay', dest='noDisplay', action='store_true',
+        help='No call to display plot. Recommend -o to save result.')
 
     return parser
 
@@ -343,6 +347,21 @@ class mapShow:
         histAx.set_xlabel('value')
 
 
+    ## Save
+    def saveMap(self,outName,outFmt):
+        '''
+        Save the output figure to the given name with the given format.
+        '''
+        # Construct output name
+        outName = '{:s}.{:s}'.format(outName,outFmt)
+
+        # Save figure
+        self.Fig.savefig(outName,dpi=600,format=outFmt)
+
+        # Report if requested
+        if self.verbose == True: print('Saved to {:s}'.format(outName))
+
+
 
 ### MAIN ---
 if __name__ == '__main__':
@@ -363,5 +382,8 @@ if __name__ == '__main__':
     # Plot histogram
     if inps.plotHist == True: M.plotHistogram()
 
+    # Save if requested
+    if inps.outName: M.saveMap(inps.outName,inps.outFmt)
 
-    plt.show()
+    # Display
+    if inps.noDisplay == False: plt.show()
