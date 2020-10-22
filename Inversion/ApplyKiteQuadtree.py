@@ -24,20 +24,27 @@ def createParser():
     parser.add_argument('--ifgName', dest='ifgName', type=str, default='filt_topophase_2stage.unw.geo',
         help='IFG name')
     parser.add_argument('--corName', dest='corName', type=str, default='topophase.cor.geo')
-    parser.add_argument('-m','--mask', dest='maskFile', type=str, default=None, help='Mask file')
+    parser.add_argument('-m','--mask', dest='maskFile', type=str, default=None,
+        help='Mask file')
 
     # Optional inputs
     parser.add_argument('-ct','--corThreshold', dest='corThreshold', type=float, default=0.2, help='Correlation threshold')
     parser.add_argument('--mask-value', dest='maskValue', default=0, help='Value of mask map to mask (default 0; 1 for MODIS watermask)')
 
-    parser.add_argument('--wavelen', dest='wavelen', type=float, default=0.0555, help='Radar wavelength')
+    parser.add_argument('--wavelen', dest='wavelen', type=float, default=0.0555,
+        help='Radar wavelength')
 
-    parser.add_argument('--epsilon', dest='epsilon', type=float, default=0.02, help='Variance threshold. Lower this for more tiles.')
-    parser.add_argument('--pctNan', dest='nanAllowed', type=float, default=0.5, help='Percentage NaN allowed per tile')
-    parser.add_argument('--minTileSize', dest='minTile', type=float, default=0.01, help='Minimum tile size in degrees')
-    parser.add_argument('--maxTileSize', dest='maxTile', type=float, default=0.2, help='Maximum tile size in degrees')
+    parser.add_argument('--epsilon', dest='epsilon', type=float, default=0.02,
+        help='Variance threshold. Lower this for more tiles.')
+    parser.add_argument('--pctNan', dest='nanAllowed', type=float, default=0.5,
+        help='Percentage NaN allowed per tile')
+    parser.add_argument('--minTileSize', dest='minTile', type=float, default=0.01,
+        help='Minimum tile size in degrees')
+    parser.add_argument('--maxTileSize', dest='maxTile', type=float, default=0.2,
+        help='Maximum tile size in degrees')
 
-    parser.add_argument('-o','--outName', dest='outName', type=str, default=None, help='Output name')
+    parser.add_argument('-o','--outName', dest='outName', type=str, default=None,
+        help='Output name')
 
     return parser
 
@@ -91,8 +98,8 @@ def loadData(dataFldr,ifgName,corName,maskFile=None):
         Files should be 2-stage unwrapped and geocoded.
     '''
     # Formulate IFG name
-    ifgName = os.path.join(dataFldr,ifgName)
-    corName = os.path.join(dataFldr,corName)
+    # ifgName = os.path.join(dataFldr,ifgName)
+    # corName = os.path.join(dataFldr,corName)
 
     # Load as Kite Scene
     sc = Scene.import_data(ifgName)
