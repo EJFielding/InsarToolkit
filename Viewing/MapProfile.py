@@ -54,6 +54,12 @@ Designed for use with georeferenced images encoded in GDAL format.
         help='Query point in image XY coordinates.')
     profileArgs.add_argument('-qLoLa','--queryLoLa', dest='queryLoLa', default=None, nargs=2,
         help='Query point in geographic coordinates')
+    profileArgs.add_argument('--binning', dest='binning', action='store_true',
+        help='Smooth profile values by binning.')
+    profileArgs.add_argument('--bin-spacing', dest='binSpacing', type=float, default=1,
+        help='Bin spacing in map units')
+    profileArgs.add_argument('--bin-widths', dest='binWidths', type=float, default=1,
+        help='Bin widths in map units')
 
     # Output arugments
     outputArgs = parser.add_argument_group('OUTPUT ARGUMENTS')
@@ -80,7 +86,7 @@ class imgProfile:
         Format profile width based on explicit input or pixel size using
          __determineProfWidth__.
         '''
-        # Specs
+        # Instance specs
         self.imgName = imgName
         self.band = band
 
@@ -89,6 +95,18 @@ class imgProfile:
 
         # Profile width
         self.__determineProfWidth__(profWidth)
+
+        # Image presets
+        self.cmap = 'viridis'
+        self.cbarOrient = 'horizontal'
+        self.background = None
+        self.pctmin = 0
+        self.pctmax = 100
+
+        # Profile presets
+        self.binning = False
+        self.binSpacing = 1  # pixels
+        self.binWidth = 5  # pixels
 
 
 
@@ -110,8 +128,6 @@ class imgProfile:
             exit()
         if self.DS.RasterCount > 0:
             print('Loaded: {:s}'.format(self.imgName))
-            print('Raster size: {:d} x {:d}'.\
-                format(self.DS.RasterYSize, self.DS.RasterXSize))
 
         # Parse data set properties
         self.__parseExtent__()
@@ -145,6 +161,10 @@ class imgProfile:
 
         # Formulate imshow extent
         self.extent = (left, right, bottom, top)
+
+        # Report basic parameters
+        print('Raster size: {:d} x {:d}'.format(M,N))
+        print('Pixel size: {:.5f}'.format(self.pxSize))
 
     def __xy2lola__(self,x,y):
         '''
@@ -208,7 +228,7 @@ class imgProfile:
 
 
     ### Plotting
-    def showImage(self, cmap, cbarOrient, background=None, pctmin=1, pctmax=100):
+    def showImage(self):
         '''
         Show image with formatting specifications. Get image parameters using
          __imageSpecs__. Display actual image with reuseable __plotImg__ 
@@ -219,25 +239,22 @@ class imgProfile:
         self.ProfFig, self.axProf = plt.subplots(figsize=(10,4))
 
         # Get specifications
-        self.__imageSpecs__(cmap, background, pctmin, pctmax)
+        self.__imageSpecs__()
 
         # Plot image
         cImg = self.__plotImg__()
 
         # Format colorbar
-        self.ImgFig.colorbar(cImg, ax=self.axImg, orientation=cbarOrient)
+        self.ImgFig.colorbar(cImg, ax=self.axImg, orientation=self.cbarOrient)
 
         # Interact with image
         self.ImgFig.canvas.mpl_connect('button_press_event',
             self.__clickProfile__)
 
-    def __imageSpecs__(self, cmap, background, pctmin, pctmax):
+    def __imageSpecs__(self):
         '''
         Gather image specifications including background, pctmin, pctmax.
         '''
-        # Record cmap value
-        self.cmap = cmap
-
         # Load image as array
         img = self.DS.GetRasterBand(self.band).ReadAsArray()
 
@@ -245,14 +262,14 @@ class imgProfile:
         img[np.isnan(img) == 1] = 0
 
         # Image background
-        if background == 'auto':
+        if self.background == 'auto':
             # Automatically detect background and mask image
             edgeValues = np.concatenate([img[0,:],img[-1,:],
                 img[:,0],img[:,-1]])
             bg = mode(edgeValues).mode[0]
         else:
             try:
-                bg = float(background)
+                bg = float(self.background)
             except:
                 bg = None
 
@@ -261,7 +278,7 @@ class imgProfile:
 
         # Min/max values
         self.vmin, self.vmax = np.percentile(self.img.compressed().flatten(),
-            [pctmin,pctmax])
+            [self.pctmin, self.pctmax])
 
     def __plotImg__(self):
         '''
@@ -509,10 +526,10 @@ class imgProfile:
         self.axProf.plot(profDist, profPts, linewidth=0, marker='.',
             color=(0.6,0.6,0.6))
 
-        # Plot moving average
-        xProf, yProf = self.__binning__(profDist, profPts, 
-            2*self.pxSize, 20*self.pxSize)
-        self.axProf.plot(xProf, yProf, 'b')
+        # Smooth using binning
+        if self.binning == True:
+            xProf, yProf = self.__binning__(profDist, profPts)
+            self.axProf.plot(xProf, yProf, 'b')
 
         # Render data
         self.ProfFig.canvas.draw()
@@ -520,13 +537,13 @@ class imgProfile:
 
 
     ### Data processing
-    def __binning__(self, profDist, profPts, dx, binWidth):
+    def __binning__(self, profDist, profPts):
         '''
         Find moving average of unevenly sampled data track.
         '''
         # Setup
-        w2 = binWidth/2  # half-width of bins
-        x = np.arange(w2,profDist.max()-w2,dx)  # distance along profile
+        w2 = self.binWidths/2  # half-width of bins
+        x = np.arange(w2,profDist.max()-w2,self.binSpacing)  # distance along profile
         nBins = len(x)  # number of bins
         binStarts = x - w2  # starting point of each bin
         binEnds = x + w2  # ending point of each bin
@@ -549,15 +566,26 @@ if __name__ == '__main__':
     inps = cmdParser()
 
     # Load image data set
-    img = imgProfile(inps.imgFile, band=inps.imgBand, profWidth=inps.profWidth)
+    prof = imgProfile(inps.imgFile, band=inps.imgBand, profWidth=inps.profWidth)
+
+    # Adjust image presets
+    prof.cmap = inps.cmap
+    prof.cbarOrient = inps.cbarOrient
+    prof.background = inps.background
+    prof.pctmin = inps.pctmin
+    prof.pctmax = inps.pctmax
+
+    # Adjust profile presets
+    prof.binning = inps.binning
+    prof.binSpacing = inps.binSpacing
+    prof.binWidths = inps.binWidths
 
     # Plot image
-    img.showImage(cmap=inps.cmap, cbarOrient=inps.cbarOrient,
-        background=inps.background, pctmin=inps.pctmin, pctmax=inps.pctmax)
+    prof.showImage()
 
     # Compute pre-defined profile
     if inps.queryXY is not None or inps.queryLoLa is not None:
-        img.queryProfile(inps.queryXY, inps.queryLoLa)
+        prof.queryProfile(inps.queryXY, inps.queryLoLa)
 
 
     plt.show()
