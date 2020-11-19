@@ -238,13 +238,13 @@ class imgProfile:
 
         # Create profile width slider
         self.PWfig, self.axPW = plt.subplots(figsize=(5,0.5))
-        self.Spw = Slider(self.axPW, 'Profile width', 
+        self.PWslider = Slider(self.axPW, 'Profile width', 
             self.pxSize, 100*self.pxSize,
             valinit = self.profWidth, valstep = self.pxSize)
         self.PWfig.tight_layout()
 
         # Slider
-        self.Spw.on_changed(self.__updateProfWidth__)
+        self.PWslider.on_changed(self.__updateProfWidth__)
 
 
     def __imageSpecs__(self):
@@ -531,6 +531,9 @@ class imgProfile:
             xProf, yProf = self.__binning__(profDist, profPts)
             self.axProf.plot(xProf, yProf, 'b')
 
+        # Format chart
+        self.axProf.set_title('{:d} data points'.format(len(profDist)))
+
         # Render data
         self.ProfFig.canvas.draw()
 
@@ -539,7 +542,7 @@ class imgProfile:
         Update profile width using slider.
         '''
         # Update value
-        self.profWidth = self.Spw.val
+        self.profWidth = self.PWslider.val
 
         # Report
         print('Reset profile width to: {:f}'.format(self.profWidth))
@@ -594,7 +597,7 @@ if __name__ == '__main__':
 
     # Adjust profile presets
     if inps.profWidth != 'auto':
-        prof.profWidth = inps.profWidth
+        prof.profWidth = float(inps.profWidth)
     prof.binning = inps.binning
     prof.binSpacing = inps.binSpacing
     prof.binWidths = inps.binWidths
