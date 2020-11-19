@@ -9,6 +9,7 @@ import os
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.widgets import Slider
 from scipy.stats import mode
 from osgeo import gdal
 
@@ -65,6 +66,8 @@ Designed for use with georeferenced images encoded in GDAL format.
     outputArgs = parser.add_argument_group('OUTPUT ARGUMENTS')
     outputArgs.add_argument('-v','--verbose', dest='verbose', action='store_true', 
         help='Verbose mode')
+    outputArgs.add_argument('-o','--outname', dest='outName', type=str, default=None,
+        help='Output name (no extension). Save points to file.')
 
     return parser
 
@@ -80,7 +83,7 @@ class imgProfile:
     '''
     Load an image and collect a profile across it.
     '''
-    def __init__(self, imgName, band=1, profWidth='auto'):
+    def __init__(self, imgName, band=1):
         '''
         Load and format geographic data set using __loadDS__.
         Format profile width based on explicit input or pixel size using
@@ -93,9 +96,6 @@ class imgProfile:
         # Load image data set
         self.__loadDS__()
 
-        # Profile width
-        self.__determineProfWidth__(profWidth)
-
         # Image presets
         self.cmap = 'viridis'
         self.cbarOrient = 'horizontal'
@@ -104,6 +104,7 @@ class imgProfile:
         self.pctmax = 100
 
         # Profile presets
+        self.profWidth = self.pxSize
         self.binning = False
         self.binSpacing = 1  # pixels
         self.binWidth = 5  # pixels
@@ -208,24 +209,6 @@ class imgProfile:
 
         self.X, self.Y = np.meshgrid(x, y)
 
-    def __determineProfWidth__(self,profWidth):
-        '''
-        Determine profile width.
-        Format if already in map units; or use 1 pixel if 'auto' is specified.
-        Called automatically by __init__.
-        '''
-        if profWidth == 'auto':
-            self.profWidth = 1.1*self.pxSize
-            print('Determined profile width based on pixel size: {:.3f}'.\
-                format(self.profWidth))
-        else:
-            try:
-                self.profWidth = float(profWidth)
-            except:
-                print('Specify profile width as float or \'auto\'')
-                exit()
-
-
 
     ### Plotting
     def showImage(self):
@@ -234,8 +217,10 @@ class imgProfile:
          __imageSpecs__. Display actual image with reuseable __plotImg__ 
          function.
         '''
-        # Spawn image and profile figures
+        # Spawn image figure
         self.ImgFig, self.axImg = plt.subplots(figsize=(8,8))
+
+        # Spawn profile fig
         self.ProfFig, self.axProf = plt.subplots(figsize=(10,4))
 
         # Get specifications
@@ -250,6 +235,17 @@ class imgProfile:
         # Interact with image
         self.ImgFig.canvas.mpl_connect('button_press_event',
             self.__clickProfile__)
+
+        # Create profile width slider
+        self.PWfig, self.axPW = plt.subplots(figsize=(5,0.5))
+        self.Spw = Slider(self.axPW, 'Profile width', 
+            self.pxSize, 100*self.pxSize,
+            valinit = self.profWidth, valstep = self.pxSize)
+        self.PWfig.tight_layout()
+
+        # Slider
+        self.Spw.on_changed(self.__updateProfWidth__)
+
 
     def __imageSpecs__(self):
         '''
@@ -317,6 +313,10 @@ class imgProfile:
         Then plot the 2D footprint of the profile. Helpful for visualizing 
          multi-pixel profile widths.
         '''
+        # Plot starting point
+        self.__plotStart__()
+
+        # Plot profile
         self.axImg.plot([self.x0, self.x1],[self.y0, self.y1], 'k', zorder=3)
 
         # Calculate unit vector
@@ -407,9 +407,6 @@ class imgProfile:
             # Generate profile
             profDist, profPts = self.__generateProfile__()
 
-            # Plot profile
-            self.__plotProfData__(profDist, profPts)
-
     def __printStart__(self):
         '''
         Print the starting coordinates in image and geo coordinates.
@@ -499,6 +496,9 @@ class imgProfile:
         print('\tPointing azimuth: {:.1f} deg'.format(90-(180/np.pi)*theta))
         print('\t{:d} points within profile'.format(Npts))
 
+        # Plot profile
+        self.__plotProfData__(profDist, profPts)
+
         # Return values
         del X, Y
         return profDist, profPts
@@ -534,6 +534,23 @@ class imgProfile:
         # Render data
         self.ProfFig.canvas.draw()
 
+    def __updateProfWidth__(self,val):
+        '''
+        Update profile width using slider.
+        '''
+        # Update value
+        self.profWidth = self.Spw.val
+
+        # Report
+        print('Reset profile width to: {:f}'.format(self.profWidth))
+
+        # Recompute profile if already created
+        if hasattr(self,'x0'):
+            # Replot profile width
+            self.__plotProfile__()
+
+            # Recompute profile
+            self.__generateProfile__()
 
 
     ### Data processing
@@ -566,7 +583,7 @@ if __name__ == '__main__':
     inps = cmdParser()
 
     # Load image data set
-    prof = imgProfile(inps.imgFile, band=inps.imgBand, profWidth=inps.profWidth)
+    prof = imgProfile(inps.imgFile, band=inps.imgBand)
 
     # Adjust image presets
     prof.cmap = inps.cmap
@@ -576,6 +593,8 @@ if __name__ == '__main__':
     prof.pctmax = inps.pctmax
 
     # Adjust profile presets
+    if inps.profWidth != 'auto':
+        prof.profWidth = inps.profWidth
     prof.binning = inps.binning
     prof.binSpacing = inps.binSpacing
     prof.binWidths = inps.binWidths
