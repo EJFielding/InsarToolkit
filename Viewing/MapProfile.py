@@ -9,7 +9,7 @@ import os
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.widgets import Slider
+from matplotlib.widgets import Slider, Button
 from scipy.stats import mode
 from osgeo import gdal
 
@@ -49,7 +49,7 @@ Designed for use with georeferenced images encoded in GDAL format.
 
     # Profile arguments
     profileArgs = parser.add_argument_group('PROFILE ARGUMENTS')
-    profileArgs.add_argument('-w','--profile-width', dest='profWidth', default='auto',
+    profileArgs.add_argument('-w','--profile-width', dest='profWidth', type=float, default=None,
         help='Profile width in pixels.')
     profileArgs.add_argument('-qXY','--queryXY', dest='queryXY', default=None, nargs=2,
         help='Query point in image XY coordinates.')
@@ -57,9 +57,9 @@ Designed for use with georeferenced images encoded in GDAL format.
         help='Query point in geographic coordinates')
     profileArgs.add_argument('--binning', dest='binning', action='store_true',
         help='Smooth profile values by binning.')
-    profileArgs.add_argument('--bin-spacing', dest='binSpacing', type=float, default=1,
+    profileArgs.add_argument('--bin-spacing', dest='binSpacing', type=float, default=None,
         help='Bin spacing in map units')
-    profileArgs.add_argument('--bin-widths', dest='binWidths', type=float, default=1,
+    profileArgs.add_argument('--bin-widths', dest='binWidths', type=float, default=None,
         help='Bin widths in map units')
 
     # Output arugments
@@ -68,6 +68,10 @@ Designed for use with georeferenced images encoded in GDAL format.
         help='Verbose mode')
     outputArgs.add_argument('-o','--outname', dest='outName', type=str, default=None,
         help='Output name (no extension). Save points to file.')
+    outputArgs.add_argument('--overwrite', dest='overwrite', action='store_true',
+        help='Overwrite previous points file')
+    outputArgs.add_argument('--profile-start', dest='profStart', type=int, default=1,
+        help='Starting number for profile indices')
 
     return parser
 
@@ -83,7 +87,7 @@ class imgProfile:
     '''
     Load an image and collect a profile across it.
     '''
-    def __init__(self, imgName, band=1):
+    def __init__(self, imgName, band=1, outName=None):
         '''
         Load and format geographic data set using __loadDS__.
         Format profile width based on explicit input or pixel size using
@@ -92,6 +96,7 @@ class imgProfile:
         # Instance specs
         self.imgName = imgName
         self.band = band
+        self.outName = outName
 
         # Load image data set
         self.__loadDS__()
@@ -104,11 +109,11 @@ class imgProfile:
         self.pctmax = 100
 
         # Profile presets
-        self.profWidth = self.pxSize
-        self.binning = False
-        self.binSpacing = 1  # pixels
-        self.binWidth = 5  # pixels
-
+        self.profNb = 1  # profile label number
+        self.profWidth = self.pxSize  # initial profile width
+        self.binning = False  # for extracting signal from wide profiles
+        self.binSpacing = 1*self.pxSize  # pixels
+        self.binWidths = 5*self.pxSize  # pixels
 
 
     ### Loading
@@ -220,9 +225,6 @@ class imgProfile:
         # Spawn image figure
         self.ImgFig, self.axImg = plt.subplots(figsize=(8,8))
 
-        # Spawn profile fig
-        self.ProfFig, self.axProf = plt.subplots(figsize=(10,4))
-
         # Get specifications
         self.__imageSpecs__()
 
@@ -236,14 +238,23 @@ class imgProfile:
         self.ImgFig.canvas.mpl_connect('button_press_event',
             self.__clickProfile__)
 
+        # Spawn profile fig
+        self.ProfFig = plt.figure(figsize=(9,5))
+
+        # Data display axis
+        self.axProf = self.ProfFig.add_subplot(position=(0.1, 0.3, 0.8, 0.6))
+
+        # Save profile button 
+        self.axSave = self.ProfFig.add_subplot(position=(0.15, 0.05, 0.1, 0.05))
+        self.saveButton = Button(self.axSave, 'Save profile', hovercolor='1')
+        self.saveButton.on_clicked(self.__saveProfile__)
+
         # Create profile width slider
-        self.PWfig, self.axPW = plt.subplots(figsize=(5,0.5))
+        self.axPW = self.ProfFig.add_subplot(position=(0.2, 0.15, 0.6, 0.05))
         self.PWslider = Slider(self.axPW, 'Profile width', 
             self.pxSize, 100*self.pxSize,
             valinit = self.profWidth, valstep = self.pxSize)
-        self.PWfig.tight_layout()
 
-        # Slider
         self.PWslider.on_changed(self.__updateProfWidth__)
 
 
@@ -340,6 +351,30 @@ class imgProfile:
 
         # Render image
         self.ImgFig.canvas.draw()
+
+    def __plotProfData__(self):
+        '''
+        Plot 1D profile data and perform basic analysis.
+        '''
+        # Clear axis
+        self.axProf.cla()
+
+        # Plot data points
+        self.axProf.plot(self.profDist, self.profPts, linewidth=0, marker='.',
+            color=(0.6,0.6,0.6))
+
+        # Smooth using binning
+        if self.binning == True:
+            xProf, yProf = self.__binning__(self.profDist, self.profPts)
+            self.axProf.plot(xProf, yProf, 'b')
+
+        # Format chart
+        profTitle = 'Profile {:d} - {:d} data points '.\
+                    format(self.profNb,len(self.profDist))
+        self.axProf.set_title(profTitle)
+
+        # Render data
+        self.ProfFig.canvas.draw()
 
 
 
@@ -486,8 +521,8 @@ class imgProfile:
 
         # Filter for only valid values
         m = profPts.mask
-        profDist = profDist[m==False]
-        profPts = profPts[m==False]
+        self.profDist = profDist[m==False]
+        self.profPts = profPts[m==False]
 
         # Print profile properties
         print('\tProfile unit vector: {:.3f}, {:.3f}'.format(*v))
@@ -497,7 +532,7 @@ class imgProfile:
         print('\t{:d} points within profile'.format(Npts))
 
         # Plot profile
-        self.__plotProfData__(profDist, profPts)
+        self.__plotProfData__()
 
         # Return values
         del X, Y
@@ -515,28 +550,6 @@ class imgProfile:
 
         return v, Len
 
-    def __plotProfData__(self, profDist, profPts):
-        '''
-        Plot 1D profile data and perform basic analysis.
-        '''
-        # Clear axis
-        self.axProf.cla()
-
-        # Plot data points
-        self.axProf.plot(profDist, profPts, linewidth=0, marker='.',
-            color=(0.6,0.6,0.6))
-
-        # Smooth using binning
-        if self.binning == True:
-            xProf, yProf = self.__binning__(profDist, profPts)
-            self.axProf.plot(xProf, yProf, 'b')
-
-        # Format chart
-        self.axProf.set_title('{:d} data points'.format(len(profDist)))
-
-        # Render data
-        self.ProfFig.canvas.draw()
-
     def __updateProfWidth__(self,val):
         '''
         Update profile width using slider.
@@ -545,6 +558,7 @@ class imgProfile:
         self.profWidth = self.PWslider.val
 
         # Report
+        print('*'*32)
         print('Reset profile width to: {:f}'.format(self.profWidth))
 
         # Recompute profile if already created
@@ -579,14 +593,85 @@ class imgProfile:
         return x, yave
 
 
+    ### Saving
+    def __saveProfile__(self,event):
+        '''
+        Save profile location and data points to a text file.
+        '''
+        # If outName is specified, save (append) data to file
+        if self.outName:
+            # Check outName formatting
+            if self.outName[-4:] != '.txt': self.outName += '.txt'
+
+            # Write data to file
+            with open(self.outName,'a+') as outFile:
+                # Format meta information
+                metaStr='''---
+prof {profNb:d}
+x0 {x0:.6f}
+y0 {y0:.6f}
+x1 {x1:.6f}
+y1 {y1:.6f}
+width {width:.6f}
+n {nPts:d}
+'''
+                metaDict={'profNb':self.profNb,
+                'x0':self.x0, 'y0':self.y0,
+                'x1':self.x1, 'y1':self.y1,
+                'width':self.profWidth,
+                'nPts':len(self.profDist)
+                }
+
+                # Write metadata
+                outFile.write(metaStr.format(**metaDict))
+
+                # Write profile distances
+                distStr = self.__array2str__(self.profDist)
+                outFile.write('dist\n')
+                outFile.write(distStr+'\n')
+
+                # Write profile data
+                ptsStr = self.__array2str__(self.profPts)
+                outFile.write('value\n')
+                outFile.write(ptsStr+'\n')
+
+            print('Saved to: {:s}'.format(self.outName))
+
+            # Update profile number
+            self.profNb += 1
+
+        # If outName not specified, alert user
+        else:
+            print('No output name specified. Profile not saved!')
+
+    def __array2str__(self,arr):
+        '''
+        Convert numpy array to string of format 1,2,3,4,5,...,n
+        '''
+        arr = str([d for d in arr])
+        arr = arr.replace('[','')
+        arr = arr.replace(']','')
+        arr = arr[:-1]
+
+        return arr
+
 
 ### MAIN ---
 if __name__ == '__main__':
     # Gather arguments
     inps = cmdParser()
 
+    # Format outName if provided
+    if inps.outName:
+        # Add .txt extension if not already there
+        if inps.outName[-4:] != '.txt': inps.outName+='.txt'
+
+        # Remove old file if specified
+        if inps.overwrite == True and os.path.exists(inps.outName):
+            os.remove(inps.outName)
+
     # Load image data set
-    prof = imgProfile(inps.imgFile, band=inps.imgBand)
+    prof = imgProfile(inps.imgFile, band=inps.imgBand, outName=inps.outName)
 
     # Adjust image presets
     prof.cmap = inps.cmap
@@ -596,11 +681,11 @@ if __name__ == '__main__':
     prof.pctmax = inps.pctmax
 
     # Adjust profile presets
-    if inps.profWidth != 'auto':
-        prof.profWidth = float(inps.profWidth)
+    prof.profNb = inps.profStart
+    if inps.profWidth is not None: prof.profWidth = float(inps.profWidth)
     prof.binning = inps.binning
-    prof.binSpacing = inps.binSpacing
-    prof.binWidths = inps.binWidths
+    if inps.binSpacing is not None: prof.binSpacing = inps.binSpacing
+    if inps.binWidths is not None: prof.binWidths = inps.binWidths
 
     # Plot image
     prof.showImage()
