@@ -416,7 +416,7 @@ class imgProfile:
         profDist, profPts = self.__generateProfile__()
 
         # Plot profile
-        self.__plotProfData__(profDist, profPts)
+        self.__plotProfData__()
 
     def __clickProfile__(self,event):
         '''

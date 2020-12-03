@@ -98,8 +98,8 @@ def loadData(dataFldr,ifgName,corName,maskFile=None):
         Files should be 2-stage unwrapped and geocoded.
     '''
     # Formulate IFG name
-    # ifgName = os.path.join(dataFldr,ifgName)
-    # corName = os.path.join(dataFldr,corName)
+    ifgName = os.path.join(dataFldr,ifgName)
+    corName = os.path.join(dataFldr,corName)
 
     # Load as Kite Scene
     sc = Scene.import_data(ifgName)
