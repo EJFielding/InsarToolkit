@@ -72,8 +72,6 @@ Designed for use with georeferenced images encoded in GDAL format.
         help='Overwrite previous points file')
     outputArgs.add_argument('--profile-start', dest='profStart', type=int, default=1,
         help='Starting number for profile indices')
-    outputArgs.add_argument('--no-display', dest='noDisplay', action='store_true',
-        help='No display.')
 
     return parser
 
@@ -697,5 +695,4 @@ if __name__ == '__main__':
         prof.queryProfile(inps.queryXY, inps.queryLoLa)
 
 
-    if inps.noDisplay == False:
-        plt.show()
+    plt.show()
