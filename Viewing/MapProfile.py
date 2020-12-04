@@ -6,6 +6,7 @@ Images should ideally be in GDAL georeferenced format.
 
 ### IMPORT MODULES ---
 import os
+import re
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
@@ -70,8 +71,10 @@ Designed for use with georeferenced images encoded in GDAL format.
         help='Output name (no extension). Save points to file.')
     outputArgs.add_argument('--overwrite', dest='overwrite', action='store_true',
         help='Overwrite previous points file')
-    outputArgs.add_argument('--profile-start', dest='profStart', type=int, default=1,
+    outputArgs.add_argument('--profile-start', dest='profStart', type=int, default=None,
         help='Starting number for profile indices')
+    outputArgs.add_argument('--no-display', dest='noDisplay', action='store_true',
+        help='Do not display image. Save profile if query points specified. Designed for use in looping through query points.')
 
     return parser
 
@@ -87,7 +90,7 @@ class imgProfile:
     '''
     Load an image and collect a profile across it.
     '''
-    def __init__(self, imgName, band=1, outName=None):
+    def __init__(self, imgName, band=1, outName=None, overwrite=False):
         '''
         Load and format geographic data set using __loadDS__.
         Format profile width based on explicit input or pixel size using
@@ -96,7 +99,6 @@ class imgProfile:
         # Instance specs
         self.imgName = imgName
         self.band = band
-        self.outName = outName
 
         # Load image data set
         self.__loadDS__()
@@ -114,6 +116,9 @@ class imgProfile:
         self.binning = False  # for extracting signal from wide profiles
         self.binSpacing = 1*self.pxSize  # pixels
         self.binWidths = 5*self.pxSize  # pixels
+
+        # Format output name
+        self.__formatOutputs__(outName, overwrite)
 
 
     ### Loading
@@ -214,6 +219,42 @@ class imgProfile:
 
         self.X, self.Y = np.meshgrid(x, y)
 
+    def __formatOutputs__(self, outName, overwrite):
+        '''
+        Format output name and confirm output folder exists.
+        Remove old files if specified.
+        '''
+        if outName is not None:
+            # Formulate absolute path
+            outName = os.path.abspath(outName)
+
+            # Formulate text file name
+            self.txtName = outName + '.txt'
+
+            # Confirm output directory exists
+            outDir = os.path.dirname(outName)
+            if not os.path.exists(outDir):
+                os.mkdir(outDir)
+                print('Created output directory: {:s}'.format(outDir))
+
+            # Delete old files if overwrite is true
+            if overwrite == True:
+                if os.path.exists(self.txtName): os.remove(self.txtName)
+            else:
+                # Retreive profile number
+                if os.path.exists(self.txtName):
+                    regex = re.compile('prof')
+                    for line in open(self.txtName, 'r'):
+                        for match in re.finditer(regex, line):
+                            # Use existing profile numbers
+                            p = int(line.split(' ')[1])
+                            self.profNb = p+1
+                    print('Existing file detected. ' \
+                        'Updated profile number to: {:d}'.format(self.profNb))
+
+            # Formulate figure name
+            self.figName = '{:s}_p{:d}.pdf'.format(outName, self.profNb)
+
 
     ### Plotting
     def showImage(self):
@@ -247,7 +288,7 @@ class imgProfile:
         # Save profile button 
         self.axSave = self.ProfFig.add_subplot(position=(0.15, 0.05, 0.1, 0.05))
         self.saveButton = Button(self.axSave, 'Save profile', hovercolor='1')
-        self.saveButton.on_clicked(self.__saveProfile__)
+        self.saveButton.on_clicked(self.saveProfile)
 
         # Create profile width slider
         self.axPW = self.ProfFig.add_subplot(position=(0.2, 0.15, 0.6, 0.05))
@@ -370,7 +411,7 @@ class imgProfile:
 
         # Format chart
         profTitle = 'Profile {:d} - {:d} data points '.\
-                    format(self.profNb,len(self.profDist))
+                    format(self.profNb, len(self.profDist))
         self.axProf.set_title(profTitle)
 
         # Render data
@@ -594,17 +635,14 @@ class imgProfile:
 
 
     ### Saving
-    def __saveProfile__(self,event):
+    def saveProfile(self,event=None):
         '''
         Save profile location and data points to a text file.
         '''
         # If outName is specified, save (append) data to file
-        if self.outName:
-            # Check outName formatting
-            if self.outName[-4:] != '.txt': self.outName += '.txt'
-
+        if self.txtName is not None and self.figName is not None:
             # Write data to file
-            with open(self.outName,'a+') as outFile:
+            with open(self.txtName,'a+') as txtFile:
                 # Format meta information
                 metaStr='''---
 prof {profNb:d}
@@ -623,21 +661,27 @@ n {nPts:d}
                 }
 
                 # Write metadata
-                outFile.write(metaStr.format(**metaDict))
+                txtFile.write(metaStr.format(**metaDict))
 
                 # Write profile distances
                 distStr = self.__array2str__(self.profDist)
-                outFile.write('dist\n')
-                outFile.write(distStr+'\n')
+                txtFile.write('dist\n')
+                txtFile.write(distStr+'\n')
 
                 # Write profile data
                 ptsStr = self.__array2str__(self.profPts)
-                outFile.write('value\n')
-                outFile.write(ptsStr+'\n')
+                txtFile.write('value\n')
+                txtFile.write(ptsStr+'\n')
 
-            print('Saved to: {:s}'.format(self.outName))
+            print('Saved prof {:d} data to: {:s}'.\
+                format(self.profNb, os.path.basename(self.txtName)))
 
-            # Update profile number
+            ## Save figure
+            self.ProfFig.savefig(self.figName, format='pdf')
+            print('Saved prof {:d} figure to: {:s}'.\
+                format(self.profNb, os.path.basename(self.figName)))
+
+            ## Update profile number
             self.profNb += 1
 
         # If outName not specified, alert user
@@ -661,17 +705,9 @@ if __name__ == '__main__':
     # Gather arguments
     inps = cmdParser()
 
-    # Format outName if provided
-    if inps.outName:
-        # Add .txt extension if not already there
-        if inps.outName[-4:] != '.txt': inps.outName+='.txt'
-
-        # Remove old file if specified
-        if inps.overwrite == True and os.path.exists(inps.outName):
-            os.remove(inps.outName)
-
     # Load image data set
-    prof = imgProfile(inps.imgFile, band=inps.imgBand, outName=inps.outName)
+    prof = imgProfile(inps.imgFile, band=inps.imgBand, 
+        outName=inps.outName, overwrite=inps.overwrite)
 
     # Adjust image presets
     prof.cmap = inps.cmap
@@ -681,7 +717,7 @@ if __name__ == '__main__':
     prof.pctmax = inps.pctmax
 
     # Adjust profile presets
-    prof.profNb = inps.profStart
+    if inps.profStart is not None: prof.profNb = inps.profStart
     if inps.profWidth is not None: prof.profWidth = float(inps.profWidth)
     prof.binning = inps.binning
     if inps.binSpacing is not None: prof.binSpacing = inps.binSpacing
@@ -694,5 +730,10 @@ if __name__ == '__main__':
     if inps.queryXY is not None or inps.queryLoLa is not None:
         prof.queryProfile(inps.queryXY, inps.queryLoLa)
 
-
-    plt.show()
+    # Display
+    if inps.noDisplay == True:
+        # Attempt to save profile if image is not shown
+        prof.saveProfile()
+    else:
+        # Otherwise, show image
+        plt.show()
